@@ -173,13 +173,31 @@ function M.paste_img(name)
         default = os.date("image-%Y%m%d-%H%M%S"),
       },
       function(input)
-        -- input 为 nil 表示用户按 Esc 取消
         if input ~= nil then
           do_paste(input)
         end
       end
     )
   end
+end
+
+--- 解析 Obsidian wikilink 格式的图片引用，供 snacks.nvim image 使用。
+-- 匹配 ![[image.png]] 中的裸文件名，在整个 vault 内递归查找实际路径。
+-- 有路径分隔符的 src（如 ./img/foo.png）返回 nil，交由 snacks 默认逻辑处理。
+---@param _ any snacks 传入的 ctx 对象（本函数不使用）
+---@param src string 图片引用字符串（如 "image.png"）
+---@return string|nil 图片文件的绝对路径，或 nil 表示未找到/不处理
+function M.resolve_for_snacks(_, src)
+  if src:find("/") or src:find("\\") then
+    return nil
+  end
+  local cfg = require("miniobsidian").config
+  local vault_path = cfg.vault_path
+  if not vault_path or vault_path == "" then
+    return nil
+  end
+  local found = vim.fs.find(src, { path = vault_path, type = "file", limit = 1 })
+  return found[1]
 end
 
 return M

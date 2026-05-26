@@ -24,6 +24,7 @@ local M = {}
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
+---@field after_note_open? fun(path: string, opts: table) 笔记文件成功打开后的回调（可选）。插件不执行任何全局副作用，由用户决定是否切换根目录或刷新文件树
 
 -- ──────────────────────────────────────────────
 -- 默认配置
@@ -45,6 +46,12 @@ M.config = {
   -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
   -- 可自定义：设为 { " ", "x" } 即回退到经典双态切换。
   checkbox_states = { " ", "x"},
+
+  ---@type fun(name: string, path: string)|nil
+  on_vault_switch = nil,
+
+  ---@type fun(path: string, opts: table)|nil
+  after_note_open = nil,
 
   --- 默认笔记 ID 函数：将标题转换为适合作文件名的小写 slug。
   -- 规则：保留中文、ASCII 字母数字、空格 → 空格变 "-" → 转小写。
@@ -181,10 +188,40 @@ function M.in_vault(path)
   if not path or path == "" then return false end
   local vault = M.config.vault_path
 
-  -- 确保比较前缀时 vault 末尾有 "/"，防止 "/vault-other/note.md" 被误判为在内
-  -- 例如 vault = "/a/b"，则 vault_prefix = "/a/b/"，避免 "/a/b2/x.md" 误判
   local vault_prefix = vault:sub(-1) == "/" and vault or vault .. "/"
   return vim.startswith(path, vault_prefix) or path == vault
+end
+
+--- 统一通知入口。
+-- 自动添加 [miniobsidian] 前缀，确保所有通知风格一致。
+---@param msg string 通知内容
+---@param level? number vim.log.levels 级别（默认 INFO）
+function M.notify(msg, level)
+  vim.notify("[miniobsidian] " .. msg, level or vim.log.levels.INFO)
+end
+
+--- 将字符串转义为合法的 YAML 双引号字符串值。
+-- 反斜杠和双引号需要转义，防止破坏 frontmatter 结构。
+---@param s string 原始字符串
+---@return string 被双引号包裹、已转义的值
+function M.yaml_quote(s)
+  return '"' .. s:gsub("\\", "\\\\"):gsub('"', '\\"') .. '"'
+end
+
+---@param path string 刚打开的笔记文件绝对路径
+---@param opts? { switch_root?: boolean }
+function M.after_note_open(path, opts)
+  opts = opts or {}
+
+  vim.api.nvim_exec_autocmds("User", {
+    pattern = "MiniObsidianNoteOpened",
+    data    = { path = path, opts = opts },
+  })
+
+  local cb = M.config.after_note_open
+  if cb then
+    pcall(cb, path, opts)
+  end
 end
 
 --- 插件入口函数：合并用户配置、扫描 vault 列表并完成初始化。

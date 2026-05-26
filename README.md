@@ -372,6 +372,91 @@ vim.api.nvim_create_autocmd("User", {
 
 ---
 
+## 回调函数
+
+插件通过两个回调将副作用（根目录切换、文件树刷新等）完全交给调用方控制，插件内部不执行任何全局副作用。
+
+### `after_note_open`
+
+在笔记文件成功打开后调用，适用于以下流程：
+
+- `new_note(title, opts)` / `:ObsidianNew`
+- `open_today(opts)` / `:ObsidianToday`
+- `_create_note(title, dir, opts)`（内部通用创建函数）
+
+**注意：** `quick_switch()` 和 `search()` 通过 picker 选择文件，插件无法预知文件何时打开，因此**不会自动调用 `after_note_open`**。如需在这两个流程完成后执行副作用，请在调用方注册 `BufEnter` 事件（见下方示例）。
+
+```lua
+require("miniobsidian").setup({
+  -- after_note_open(path, opts)
+  --   path: 打开的笔记文件绝对路径
+  --   opts: 调用时传入的选项表（如 { switch_root = true }）
+  after_note_open = function(path, opts)
+    if opts and opts.switch_root then
+      local vault_path = require("miniobsidian").config.vault_path
+      -- 切换 Neovim 工作目录到 vault 根
+      pcall(vim.api.nvim_set_current_dir, vault_path)
+      -- 刷新 snacks explorer（示例；换成你使用的文件树刷新逻辑）
+      vim.notify("已切换根目录: " .. vault_path)
+    end
+  end,
+})
+```
+
+### `on_vault_switch`
+
+在 `vault.do_switch()` 更新运行时状态、设置 cwd、触发 `MiniObsidianVaultSwitch` 事件后调用。文件树刷新等副作用由此回调负责。
+
+```lua
+require("miniobsidian").setup({
+  -- on_vault_switch(name, path)
+  --   name: 新 vault 目录名
+  --   path: 新 vault 绝对路径
+  on_vault_switch = function(name, path)
+    -- 示例：刷新 snacks explorer
+    local ok, snacks = pcall(require, "snacks")
+    if ok and snacks.picker then
+      local exps_ok, exps = pcall(snacks.picker.get, { source = "explorer" })
+      if exps_ok and exps then
+        for _, exp in ipairs(exps) do
+          pcall(exp.set_cwd, exp, path)
+          pcall(exp.find, exp, { refresh = true })
+        end
+      end
+    end
+    vim.notify("已切换到 vault: " .. name)
+  end,
+})
+```
+
+### 为 picker 流添加 BufEnter 回调
+
+`quick_switch()` 和 `search()` 使用 snacks.nvim picker 异步选择文件，插件内部不知道文件何时最终打开。若需要在这两个流程后也触发根目录切换，在调用前注册一次性 `BufEnter` 事件即可：
+
+```lua
+-- 示例：自定义带根目录切换的快速切换键映射
+vim.keymap.set("n", "<leader>nO", function()
+  local core = require("miniobsidian")
+  -- 注册一次性 BufEnter：picker 选中文件打开后触发
+  vim.api.nvim_create_autocmd("BufEnter", {
+    pattern  = "*.md",
+    once     = true,
+    callback = function(ev)
+      if core.in_vault(ev.file) then
+        -- 执行你的副作用（如切换根目录、刷新文件树等）
+        local vault_path = core.config.vault_path
+        pcall(vim.api.nvim_set_current_dir, vault_path)
+      end
+    end,
+  })
+  require("miniobsidian.note").quick_switch()
+end, { desc = "Obsidian: 快速切换（切换根目录）" })
+```
+
+> **提示：** `once = true` 确保此 autocmd 只触发一次，不会残留影响后续普通 Markdown 文件的打开。
+
+---
+
 ## 文件结构
 
 ```

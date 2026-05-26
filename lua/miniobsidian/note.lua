@@ -14,18 +14,7 @@ local M = {}
 -- 私有工具函数
 -- ──────────────────────────────────────────────
 
---- 将任意字符串转义为合法的 YAML 双引号字符串值。
--- YAML 双引号字符串内，反斜杠和双引号需要转义，防止注入破坏 frontmatter 结构。
--- 示例：
---   'Hello "World"' → '"Hello \"World\""'
---   'C:\path'       → '"C:\\path"'
----@param title string 原始标题
----@return string yaml_value 被双引号包裹、已转义的 YAML 值
-local function yaml_quote(title)
-  -- 先转义反斜杠（必须先于双引号转义，否则新引入的 \\ 会被再次处理）
-  -- 再转义双引号
-  return '"' .. title:gsub('\\', '\\\\'):gsub('"', '\\"') .. '"'
-end
+
 
 --- 根据笔记标题计算其目标文件路径，并确保父目录存在。
 -- 路径规则：{target_dir}/{note_id_func(title)}.md
@@ -176,16 +165,16 @@ end
 -- 笔记始终创建到 config.notes_subdir 目录（快捷创建，无需关心归档位置）。
 -- 副作用：调用 vim.ui.input 时会短暂暂停等待用户输入。
 ---@param title? string 笔记标题（可选；为 nil 或 "" 时弹出交互输入框）
-function M.new_note(title)
+---@param opts? { switch_root?: boolean }
+function M.new_note(title, opts)
+  opts = opts or {}
+
   if title and title ~= "" then
-    -- 标题已知，直接创建
-    M._create_note(title)
+    M._create_note(title, nil, opts)
   else
-    -- 调用 Neovim 内置 UI 输入框（可被 noice.nvim 等插件替换为更美观的实现）
     vim.ui.input({ prompt = "新笔记标题: " }, function(input)
-      -- input 为 nil 表示用户按 Esc 取消，input == "" 表示输入为空，均跳过
       if input and input ~= "" then
-        M._create_note(input)
+        M._create_note(input, nil, opts)
       end
     end)
   end
@@ -262,18 +251,16 @@ end
 --   • 通过 vim.cmd("edit ...") 打开/跳转到文件。
 ---@param title string 笔记标题（不能为空）
 ---@param dir?  string 目标目录绝对路径（nil 时使用 notes_subdir）
-function M._create_note(title, dir)
+---@param opts? { switch_root?: boolean }
+function M._create_note(title, dir, opts)
   local path     = note_path(title, dir)
-  -- 使用用户配置的日期格式，与 Obsidian 保持一致
   local cfg      = require("miniobsidian").config
   local date_str = os.date(cfg.daily_date_format)
 
-  -- 构造标准 YAML frontmatter + 一级标题。
-  -- table.concat 比多次字符串拼接效率更高（避免创建中间字符串）。
-  -- yaml_quote 确保含特殊字符的标题不破坏 YAML 结构。
+  local core = require("miniobsidian")
   local frontmatter = table.concat({
     "---",
-    "title: " .. yaml_quote(title),
+    "title: " .. core.yaml_quote(title),
     "date: " .. date_str,
     "tags: []",
     "---",
@@ -282,12 +269,8 @@ function M._create_note(title, dir)
     "",
   }, "\n")
 
-  -- filereadable 返回 0 表示文件不存在或不可读，此时才写入初始内容
   local is_new = vim.fn.filereadable(path) == 0
   if is_new then
-    -- pcall 保护 io.open/write/close 链路：
-    --   • 若目录突然被删除、磁盘满等情况，io.open 会返回 nil 而非抛出错误，
-    --     需要手动 error() 转为异常，然后由 pcall 捕获。
     local ok, err = pcall(function()
       local f = io.open(path, "w")
       if not f then
@@ -302,30 +285,23 @@ function M._create_note(title, dir)
       return
     end
 
-    -- 新文件写入后立即使缓存失效，确保补全列表能立刻看到新笔记
-    require("miniobsidian").invalidate_cache()
+    core.invalidate_cache()
   end
 
-  -- vim.schedule 的必要性：
-  --   当本函数从 vim.ui.input 的回调中被调用时，Neovim 处于 "textlock" 状态，
-  --   此时直接调用 vim.cmd("edit ...") 会报 E565 错误。
-  --   vim.schedule 将操作推迟到主事件循环的下一个安全时机执行，规避此问题。
   vim.schedule(function()
-    -- fnameescape 处理路径中的空格、括号等对 :edit 命令有特殊含义的字符
     vim.cmd("edit " .. vim.fn.fnameescape(path))
 
-    -- 新建笔记时：找到一级标题行，将光标定位到标题下一行（正文起始处）。
-    -- 打开已有笔记时不移动光标，保持用户上次的位置。
     if is_new then
       local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
       for i, line in ipairs(lines) do
         if line:match("^# ") then
-          -- i 是 1-indexed；目标行 = 标题行 + 1，不超过 buffer 末尾
           vim.api.nvim_win_set_cursor(0, { math.min(i + 1, #lines), 0 })
           break
         end
       end
     end
+
+    core.after_note_open(path, opts)
   end)
 end
 
@@ -409,13 +385,24 @@ end
 -- 搜索范围限定为 notes_subdir，避免把模板、附件等非笔记内容混入结果。
 local MARKDOWN_EXTS = { "md" }
 
+--- 返回笔记目录的绝对路径（处理 notes_subdir 为空字符串的情况）。
+-- 当 notes_subdir = "" 时直接返回 vault_path，避免末尾出现多余的 "/"。
+---@return string notes_dir 笔记目录绝对路径（无末尾斜杠）
+local function get_notes_dir()
+  local cfg = require("miniobsidian").config
+  if cfg.notes_subdir and cfg.notes_subdir ~= "" then
+    return cfg.vault_path .. "/" .. cfg.notes_subdir
+  end
+  return cfg.vault_path
+end
+
 -- 以 vault_path 为工作目录，打开文件模糊搜索浮窗。
 -- 前置条件：需要 snacks.nvim 插件（Snacks.picker.files）。
+-- 注意：此函数不调用 after_note_open，picker 的文件打开时机由 snacks.nvim 控制。
+--       如需在选中文件后自动切换根目录，请在调用方注册 BufEnter 事件，参见 README。
 function M.quick_switch()
-  local cfg = require("miniobsidian").config
-  local notes_dir = cfg.vault_path .. "/" .. cfg.notes_subdir
+  local notes_dir = get_notes_dir()
 
-  -- pcall 保护 require，避免 snacks.nvim 未安装时崩溃
   local ok, snacks = pcall(require, "snacks")
   if not ok then
     vim.notify("[miniobsidian] 需要 snacks.nvim 插件", vim.log.levels.ERROR)
@@ -435,10 +422,10 @@ end
 -- 以 notes_subdir 为工作目录，通过 Snacks.picker.grep 打开搜索浮窗。
 -- 若传入 query，将作为初始搜索词填入输入框。
 -- 前置条件：需要 snacks.nvim 插件 + ripgrep（rg）可执行文件。
+-- 注意：此函数不调用 after_note_open，参见 README 了解如何为 picker 流添加回调。
 ---@param query? string 初始搜索词（可选；传 nil 时浮窗为空输入状态）
 function M.search(query)
-  local cfg = require("miniobsidian").config
-  local notes_dir = cfg.vault_path .. "/" .. cfg.notes_subdir
+  local notes_dir = get_notes_dir()
 
   local ok, snacks = pcall(require, "snacks")
   if not ok then
@@ -452,8 +439,8 @@ function M.search(query)
     dirs   = { notes_dir },
     search = query,
     cmd    = "rg",
-    hidden = false,  -- 不搜索隐藏目录中的文件
-    glob   = "*.md",  -- 仅搜索 Markdown 笔记文件
+    hidden = false,
+    glob   = "*.md",
   })
 end
 

@@ -54,8 +54,8 @@ end
 --- 切换当前活跃 vault，更新运行时状态并使笔记缓存失效。
 -- 调用后，所有子模块（note/template/completion 等）将自动使用新 vault 路径，
 -- 因为它们均通过 require("miniobsidian").config.vault_path 读取路径。
--- 同时将 Neovim 的工作目录切换到新 vault，触发 User MiniObsidianVaultSwitch 事件
--- 供外部工具（如项目根目录缓存）响应。
+-- 同时将 Neovim 的工作目录切换到新 vault，触发 User MiniObsidianVaultSwitch 事件，
+-- 并调用用户配置的 on_vault_switch 回调（文件树刷新等副作用由回调负责）。
 ---@param entry {name: string, path: string} 目标 vault 条目
 function M.do_switch(entry)
   local core = require("miniobsidian")
@@ -76,6 +76,17 @@ function M.do_switch(entry)
     pattern = "MiniObsidianVaultSwitch",
     data    = { name = entry.name, path = entry.path },
   })
+
+  -- 调用用户配置的 on_vault_switch 回调（如果存在）
+  if core.config.on_vault_switch then
+    local cb_ok, cb_err = pcall(core.config.on_vault_switch, entry.name, entry.path)
+    if not cb_ok then
+      vim.notify(
+        "[miniobsidian] on_vault_switch 回调执行失败: " .. tostring(cb_err),
+        vim.log.levels.WARN
+      )
+    end
+  end
 
   vim.notify("[miniobsidian] 已切换到 vault：" .. entry.name, vim.log.levels.INFO)
 end

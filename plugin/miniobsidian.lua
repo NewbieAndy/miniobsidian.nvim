@@ -23,16 +23,20 @@ vim.g.loaded_miniobsidian = true
 -- 所有命令均使用延迟 require（在回调中 require，而非顶层 require），
 -- 这样只有在实际执行命令时才加载对应模块，减少插件对启动时间的影响。
 
---- :ObsidianNew [title]
+--- :ObsidianNew[!] [title]
 -- 新建一篇笔记（快捷创建，始终落到 notes_subdir 目录）。title 可选：
 --   • 提供 title：直接在 notes_subdir 目录创建并跳转。
 --   • 不提供（nargs="?"）：弹出 vim.ui.input 交互框让用户输入标题。
+-- 使用 !（bang）时不切换根目录，适合临时创建笔记。
 vim.api.nvim_create_user_command("ObsidianNew", function(opts)
-  -- opts.args 为空字符串（用户未提供参数）时传 nil，触发交互输入框
-  require("miniobsidian.note").new_note(opts.args ~= "" and opts.args or nil)
+  require("miniobsidian.note").new_note(
+    opts.args ~= "" and opts.args or nil,
+    { switch_root = opts.bang }
+  )
 end, {
-  nargs = "?",                -- 接受 0 或 1 个参数
-  desc  = "新建 Obsidian 笔记（到默认 notes_subdir 目录）",
+  nargs = "?",
+  bang  = true,
+  desc  = "新建 Obsidian 笔记（到默认 notes_subdir 目录）；! 同时切换根目录",
 })
 
 --- :ObsidianNewHere
@@ -57,21 +61,24 @@ end, {
 
 --- :ObsidianSwitch
 -- 通过 Snacks.picker 打开 vault 内文件的模糊搜索浮窗，快速跳转到任意笔记。
--- 无参数。
+-- 如需在选中文件后切换根目录，请在 after_note_open 或 BufEnter 回调中处理（参见 README）。
 vim.api.nvim_create_user_command("ObsidianSwitch", function()
   require("miniobsidian.note").quick_switch()
 end, {
-  desc = "快速切换 vault 内的笔记（Snacks picker）",
+  desc = "快速切换 vault 内的笔记",
 })
 
 --- :ObsidianSearch [query]
 -- 通过 Snacks.picker + ripgrep 在 vault 内全文搜索。
 -- query 可选：提供时作为初始搜索词填入浮窗输入框。
+-- 如需在选中文件后切换根目录，请在 after_note_open 或 BufEnter 回调中处理（参见 README）。
 vim.api.nvim_create_user_command("ObsidianSearch", function(opts)
-  require("miniobsidian.note").search(opts.args ~= "" and opts.args or nil)
+  require("miniobsidian.note").search(
+    opts.args ~= "" and opts.args or nil
+  )
 end, {
   nargs = "?",
-  desc  = "全文搜索 vault（ripgrep）",
+  desc  = "全文搜索 vault",
 })
 
 --- :ObsidianTemplate
@@ -108,14 +115,14 @@ end, {
   desc  = "粘贴剪贴板图片（macOS）",
 })
 
---- :ObsidianToday
+--- :ObsidianToday[!]
 -- 打开（或创建）今日每日笔记。
 --   • 文件路径：vault_path/dailies_folder/{daily_date_format}.md
 --   • 文件不存在时自动写入带 frontmatter 的初始内容，并使补全 cache 失效。
---   • 无参数。
-vim.api.nvim_create_user_command("ObsidianToday", function()
-  require("miniobsidian.daily").open_today()
-end, { desc = "打开今日每日笔记" })
+--   • 使用 !（bang）时不切换根目录，适合临时查看日记。
+vim.api.nvim_create_user_command("ObsidianToday", function(opts)
+  require("miniobsidian.daily").open_today({ switch_root = opts.bang })
+end, { bang = true, desc = "打开今日每日笔记；! 同时切换根目录" })
 
 --- :ObsidianSetup
 -- 使用默认配置初始化插件（等价于 require("miniobsidian").setup()）。
