@@ -134,7 +134,9 @@ function M.get_all_notes(force)
   -- 过滤：排除路径中含有隐藏目录段（以 "." 开头）的文件，
   -- 避免 .obsidian/、.git/ 等目录下的 .md 文件混入笔记列表。
   local notes = {}
-  local prefix_len = #vault + 2  -- 跳过 "vault/" 前缀，得到相对路径起始位置
+  -- 去掉 vault 末尾斜杠后加 "/"，确保无论 vault_path 是否带尾斜杠都能正确截取相对路径
+  local vault_prefix = vault:gsub("/+$", "") .. "/"
+  local prefix_len = #vault_prefix + 1  -- sub(prefix_len) 从第一个非斜杠字符开始
   for _, p in ipairs(raw) do
     local rel = p:sub(prefix_len)
     local hidden = false
