@@ -30,7 +30,7 @@
 
 | 功能 | 详细说明 |
 |------|---------|
-| 🗂️ **多 Vault 支持** | 自动扫描 `vaults_parent` 下含 `.obsidian/` 子目录的文件夹作为有效 vault；一键切换，同步更新 Neovim 工作目录，兼容 neo-tree / snacks.nvim 等依赖 cwd 的工具 |
+| 🗂️ **多 Vault 支持** | 自动扫描 `vaults_parent` 下含 `.obsidian/` 子目录的文件夹作为有效 vault；若 `vaults_parent` 留空且 `auto_discover` 开启，自动从 Obsidian 官方 `obsidian.json` 读取已注册 vault；一键切换，同步更新 Neovim 工作目录，兼容 neo-tree / snacks.nvim 等依赖 cwd 的工具 |
 | 📝 **快速创建笔记** | 自动生成 YAML frontmatter（`title`、`date`、`tags`）；支持自定义文件名生成函数；内置 slug 规则兼容中文（CJK）字符；新建时光标自动定位到正文起始行 |
 | 📁 **目录感知创建** | 焦点在文件浏览器时（snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw），在光标所在目录下新建笔记；光标在文件上则在同级目录创建；目标必须在当前 vault 内 |
 | 🔀 **快速切换笔记** | 通过 `snacks.nvim` picker 在 `notes_subdir` 中模糊搜索并跳转 Markdown 笔记；自动过滤 `.obsidian/`、`.git/` 等隐藏目录 |
@@ -113,10 +113,8 @@
   lazy = true,
   ft = "markdown",
   config = function()
-    require("miniobsidian").setup({
-      vaults_parent = "~/Documents/Obsidian",  -- vault 父目录（必填）
-      default_vault = "MyVault",               -- 默认激活的 vault 名（可选）
-    })
+    require("miniobsidian").setup()
+    -- 零配置启动：自动从 Obsidian 官方配置发现 vault，并同步 vault 内设置
   end,
 }
 ```
@@ -148,7 +146,9 @@
   },
   config = function()
     require("miniobsidian").setup({
-      vaults_parent = "~/Library/Mobile Documents/iCloud~md~obsidian/Documents",
+      -- vaults_parent 留空时，插件会自动从 Obsidian 官方配置发现 vault
+      -- 如需手动指定，取消下行注释：
+      -- vaults_parent = "~/Library/Mobile Documents/iCloud~md~obsidian/Documents",
       default_vault = "MyVault",
       notes_subdir  = "Notes",
       checkbox_states = { " ", "/", "x", "-" },
@@ -183,21 +183,32 @@
 
 ```lua
 require("miniobsidian").setup({
-  -- ── 必填 ──────────────────────────────────────────────────────────────
+  -- ── 可选 ──────────────────────────────────────────────────────────────
   -- vault 父目录路径
   -- 插件自动扫描其下含 .obsidian/ 子目录的文件夹作为有效 vault
   -- 支持 ~ 展开；也适用于 iCloud Drive 同步路径
+  -- 留空时，若 auto_discover 为 true，插件会自动从 Obsidian 官方配置发现 vault
   vaults_parent = "~/Documents/Obsidian",
 
-  -- ── 可选 ──────────────────────────────────────────────────────────────
   -- 默认激活的 vault 名称（省略时取扫描到的第一个 vault，按字母序排列）
   default_vault = "MyVault",
 
+  -- 当 vaults_parent 为空时，是否自动从 Obsidian 官方 obsidian.json 发现 vault
+  -- 默认 true；设为 false 则必须手动指定 vaults_parent
+  auto_discover = true,
+
+  -- 确定活跃 vault 后，是否自动同步该 vault 内 .obsidian/*.json 配置到插件
+  -- 默认 true；同步的字段包括 notes_subdir、dailies_folder、daily_date_format
+  -- 用户手动配置的值优先级始终高于自动同步的值
+  sync_obsidian_config = true,
+
   -- 新建笔记存放的子目录（相对于活跃 vault 根）
   -- 留空 "" 时直接存放在 vault 根目录
+  -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/app.json 的 newFileFolderPath
   notes_subdir = "Notes",
 
   -- 每日笔记目录
+  -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/daily-notes.json 的 folder
   dailies_folder = "Dailies",
 
   -- 模板目录（:ObsidianTemplate 从此处读取 .md 文件，支持子目录）
@@ -208,6 +219,8 @@ require("miniobsidian").setup({
 
   -- 日期格式（用于每日笔记文件名及 frontmatter `date:` 字段）
   -- 采用 Lua 的 os.date 格式字符串
+  -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/daily-notes.json 的 format
+  -- 并尝试将 Moment.js 格式转换为 Lua os.date 格式
   daily_date_format = "%Y-%m-%d",
 
   -- Checkbox 循环状态序列（按配置顺序切换，可使用上方状态参考表中的任意字符）
@@ -226,6 +239,30 @@ require("miniobsidian").setup({
   end,
 })
 ```
+
+### 自动发现与配置同步
+
+当 `auto_discover = true`（默认）且 `vaults_parent` 留空时，插件会自动查找 Obsidian 官方配置文件（`obsidian.json`）并从中读取已注册的 vault 列表。支持以下平台：
+
+- **macOS**：`~/Library/Application Support/obsidian/obsidian.json`
+- **Linux**：`~/.config/obsidian/obsidian.json`，以及 Flatpak / Snap 安装路径
+- **Windows**：`%APPDATA%\obsidian\obsidian.json`
+
+当 `sync_obsidian_config = true`（默认）时，插件在确定活跃 vault 后会自动读取该 vault 内的 Obsidian 配置，并同步到插件配置中：
+
+| 同步来源 | 字段 | 说明 |
+|---------|------|------|
+| `.obsidian/app.json` | `notes_subdir` | 读取 `newFileFolderPath`（当 `newFileLocation` 为 `folder` 时） |
+| `.obsidian/daily-notes.json` | `dailies_folder` | 读取 `folder` |
+| `.obsidian/daily-notes.json` | `daily_date_format` | 读取 `format` 并尝试将 Moment.js 格式转换为 Lua `os.date` 格式 |
+
+**配置优先级（从高到低）：**
+
+1. 用户在 `setup()` 中**显式设置**的值 — 永远不被覆盖
+2. 自动同步从 Obsidian 配置读取的值 — 仅在用户未显式设置时生效
+3. 插件内置默认值
+
+切换 vault 时（`:ObsidianSwitchVault`），若 `sync_obsidian_config` 为 true，插件会自动重新读取新 vault 的配置并应用。
 
 ---
 
@@ -463,6 +500,7 @@ end, { desc = "Obsidian: 快速切换（切换根目录）" })
 lua/miniobsidian/
 ├── init.lua          核心：setup()、vault 检测、笔记路径缓存、in_vault()
 ├── vault.lua         多 vault 扫描、切换（更新 cwd）、picker UI
+├── config_sync.lua   读取 Obsidian 官方配置（自动发现 + vault 内配置同步）
 ├── note.lua          笔记创建、快速切换、全文搜索、follow_or_create
 ├── daily.lua         每日笔记（:ObsidianToday）
 ├── link.lua          Wiki 链接解析与跳转（link_at_cursor、follow_link_or_toggle）

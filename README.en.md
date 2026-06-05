@@ -30,7 +30,7 @@ English · [中文](README.md)
 
 | Feature | Description |
 |---------|-------------|
-| 🗂️ **Multi-Vault Support** | Auto-discovers vaults under `vaults_parent` by detecting `.obsidian/` subdirectories; one-keystroke switching updates Neovim's cwd, compatible with neo-tree / snacks.nvim and other cwd-aware tools |
+| 🗂️ **Multi-Vault Support** | Auto-discovers vaults under `vaults_parent` by detecting `.obsidian/` subdirectories; when `vaults_parent` is empty and `auto_discover` is enabled, reads registered vaults from Obsidian's official `obsidian.json`; one-keystroke switching updates Neovim's cwd, compatible with neo-tree / snacks.nvim and other cwd-aware tools |
 | 📝 **Quick Note Creation** | Auto-generates YAML frontmatter (`title`, `date`, `tags`); supports a custom filename generator; built-in slug logic handles CJK (Chinese/Japanese/Korean) characters; cursor lands at the first body line |
 | 📁 **Context-aware Creation** | When focused in a file explorer (snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw), creates the note in the directory under the cursor; if the cursor is on a file, creates it in that file's parent directory; target must be inside the current vault |
 | 🔀 **Quick Switch** | Fuzzy-find and jump between Markdown notes in `notes_subdir` via a `snacks.nvim` picker; hidden directories (`.obsidian/`, `.git/`) are automatically excluded |
@@ -113,10 +113,9 @@ Health check:
   lazy = true,
   ft = "markdown",
   config = function()
-    require("miniobsidian").setup({
-      vaults_parent = "~/Documents/Obsidian",  -- parent directory of your vaults (required)
-      default_vault = "MyVault",               -- default vault name (optional)
-    })
+    require("miniobsidian").setup()
+    -- Zero-config startup: auto-discovers vaults from Obsidian's official config
+    -- and syncs vault-specific settings automatically.
   end,
 }
 ```
@@ -148,7 +147,9 @@ Health check:
   },
   config = function()
     require("miniobsidian").setup({
-      vaults_parent = "~/Library/Mobile Documents/iCloud~md~obsidian/Documents",
+      -- vaults_parent is optional when auto_discover is true (default).
+      -- Uncomment below to use manual discovery instead:
+      -- vaults_parent = "~/Library/Mobile Documents/iCloud~md~obsidian/Documents",
       default_vault = "MyVault",
       notes_subdir  = "Notes",
       checkbox_states = { " ", "/", "x", "-" },
@@ -185,21 +186,33 @@ All options with their defaults:
 
 ```lua
 require("miniobsidian").setup({
-  -- ── Required ──────────────────────────────────────────────────────────
+  -- ── Optional ──────────────────────────────────────────────────────────
   -- Parent directory containing your Obsidian vaults.
   -- The plugin scans for subdirectories that contain a .obsidian/ folder.
   -- Supports ~ expansion and iCloud Drive paths.
+  -- Leave empty to auto-discover vaults from Obsidian's official config when auto_discover is true.
   vaults_parent = "~/Documents/Obsidian",
 
-  -- ── Optional ──────────────────────────────────────────────────────────
   -- Name of the vault to activate on startup (first vault found if omitted, sorted alphabetically)
   default_vault = "MyVault",
 
+  -- When vaults_parent is empty, auto-discovers vaults from Obsidian's official obsidian.json.
+  -- Default true; set to false to require manual vaults_parent.
+  auto_discover = true,
+
+  -- After determining the active vault, automatically sync settings from that vault's
+  -- .obsidian/*.json files into the plugin config.
+  -- Default true; synced fields include notes_subdir, dailies_folder, daily_date_format.
+  -- User-supplied values always take precedence over auto-synced values.
+  sync_obsidian_config = true,
+
   -- Subdirectory for new notes, relative to the active vault root.
   -- Set to "" to store notes directly in the vault root.
+  -- When sync_obsidian_config is true, reads newFileFolderPath from .obsidian/app.json.
   notes_subdir = "Notes",
 
   -- Subdirectory for daily notes
+  -- When sync_obsidian_config is true, reads folder from .obsidian/daily-notes.json.
   dailies_folder = "Dailies",
 
   -- Subdirectory for templates (:ObsidianTemplate reads .md files here; subdirectories supported)
@@ -210,6 +223,8 @@ require("miniobsidian").setup({
 
   -- Date format used in daily note filenames and frontmatter `date:` fields.
   -- Uses Lua's os.date format string.
+  -- When sync_obsidian_config is true, reads format from .obsidian/daily-notes.json
+  -- and attempts to convert Moment.js format to Lua os.date format.
   daily_date_format = "%Y-%m-%d",
 
   -- Checkbox cycle states (toggle cycles through these in order).
@@ -228,6 +243,30 @@ require("miniobsidian").setup({
   end,
 })
 ```
+
+### Auto-Discovery and Config Sync
+
+When `auto_discover = true` (default) and `vaults_parent` is left empty, the plugin automatically locates Obsidian's official configuration file (`obsidian.json`) and reads the list of registered vaults. Supported platforms:
+
+- **macOS**: `~/Library/Application Support/obsidian/obsidian.json`
+- **Linux**: `~/.config/obsidian/obsidian.json`, plus Flatpak / Snap install paths
+- **Windows**: `%APPDATA%\obsidian\obsidian.json`
+
+When `sync_obsidian_config = true` (default), after determining the active vault the plugin reads that vault's Obsidian configuration files and syncs relevant settings:
+
+| Source | Field | Description |
+|--------|-------|-------------|
+| `.obsidian/app.json` | `notes_subdir` | Reads `newFileFolderPath` (when `newFileLocation` is `folder`) |
+| `.obsidian/daily-notes.json` | `dailies_folder` | Reads `folder` |
+| `.obsidian/daily-notes.json` | `daily_date_format` | Reads `format` and attempts to convert Moment.js format to Lua `os.date` format |
+
+**Configuration priority (highest to lowest):**
+
+1. Values you **explicitly set** in `setup()` — never overwritten
+2. Auto-synced values from Obsidian's config — only applied when you haven't set the field manually
+3. Plugin built-in defaults
+
+When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is true the plugin automatically re-reads the new vault's settings and applies them.
 
 ---
 
@@ -380,6 +419,7 @@ vim.api.nvim_create_autocmd("User", {
 lua/miniobsidian/
 ├── init.lua          Core: setup(), vault detection, note path cache, in_vault()
 ├── vault.lua         Multi-vault discovery, switching (updates cwd), picker UI
+├── config_sync.lua   Obsidian official config reader (auto-discovery + vault setting sync)
 ├── note.lua          Note creation, quick switch, full-text search, follow_or_create
 ├── daily.lua         Daily note (:ObsidianToday)
 ├── link.lua          Wiki link parsing and navigation (link_at_cursor, follow_link_or_toggle)

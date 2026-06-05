@@ -19,13 +19,32 @@ end
 
 --- 扫描指定父目录，返回所有含 .obsidian/ 子目录的有效 vault 列表。
 -- 识别规则：子目录存在 AND 子目录内含 .obsidian/ → 视为 Obsidian vault。
+-- 若 parent 为空字符串或 nil，且 auto_discover 为 true，则尝试从 Obsidian 官方
+-- 配置文件 obsidian.json 中自动发现已注册的 vault。
 -- 结果按目录名字母序排列，保证多次调用顺序稳定。
 -- 扫描结果带模块级缓存，session 内首次调用后即时响应；
 -- 调用 refresh_vaults() 或 setup() 可清除缓存重新扫描。
----@param parent string vault 父目录的绝对路径（已展开 ~）
+---@param parent? string vault 父目录的绝对路径（已展开 ~）；为空时尝试自动发现
 ---@return {name: string, path: string}[] 有效 vault 列表（可能为空）
 function M.list_vaults(parent)
   if _vaults_cache then return _vaults_cache end   -- 命中缓存，直接返回
+
+  -- parent 为空时，尝试从 Obsidian 官方配置自动发现
+  if not parent or parent == "" then
+    local ok, config_sync = pcall(require, "miniobsidian.config_sync")
+    if ok then
+      local vaults = config_sync.discover_vaults()
+      if #vaults > 0 then
+        _vaults_cache = vaults
+        return vaults
+      end
+    end
+    vim.notify(
+      "[miniobsidian] vaults_parent 未设置且自动发现未找到 vault",
+      vim.log.levels.ERROR
+    )
+    return {}
+  end
 
   if vim.fn.isdirectory(parent) == 0 then
     vim.notify("[miniobsidian] vaults_parent 目录不存在: " .. parent, vim.log.levels.ERROR)
@@ -54,6 +73,7 @@ end
 --- 切换当前活跃 vault，更新运行时状态并使笔记缓存失效。
 -- 调用后，所有子模块（note/template/completion 等）将自动使用新 vault 路径，
 -- 因为它们均通过 require("miniobsidian").config.vault_path 读取路径。
+-- 若 sync_obsidian_config 为 true，还会读取新 vault 内 .obsidian/*.json 并同步配置。
 -- 同时将 Neovim 的工作目录切换到新 vault，触发 User MiniObsidianVaultSwitch 事件，
 -- 并调用用户配置的 on_vault_switch 回调（文件树刷新等副作用由回调负责）。
 ---@param entry {name: string, path: string} 目标 vault 条目
@@ -62,6 +82,19 @@ function M.do_switch(entry)
   core.config.vault_path = entry.path
   core.active_vault_name = entry.name
   core.invalidate_cache()
+
+  -- 同步 Obsidian vault 内配置（用户手动配置优先）
+  if core.config.sync_obsidian_config then
+    local ok, config_sync = pcall(require, "miniobsidian.config_sync")
+    if ok then
+      local overrides = config_sync.read_vault_config(entry.path)
+      for key, value in pairs(overrides) do
+        if not core._user_config_keys or not core._user_config_keys[key] then
+          core.config[key] = value
+        end
+      end
+    end
+  end
 
   -- 同步 Neovim 全局工作目录，确保 snacks.picker / neo-tree / root 缓存等
   -- 依赖 cwd 的工具能感知到 vault 已切换。

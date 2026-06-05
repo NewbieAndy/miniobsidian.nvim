@@ -14,8 +14,10 @@ local M = {}
 -- ──────────────────────────────────────────────
 
 ---@class MiniObsidian.Config
----@field vaults_parent string  vault 父目录路径（必填，支持 ~ 展开）
----@field default_vault? string 默认激活的 vault 目录名（省略时取扫描到的第一个）
+---@field vaults_parent? string vault 父目录路径（可选；支持 ~ 展开；留空时若 auto_discover 为 true 则自动从 Obsidian 官方配置发现）
+---@field default_vault? string 默认激活的 vault 目录名（省略时先尝试 obs-cli 默认配置，再取第一个）
+---@field auto_discover boolean 当 vaults_parent 为空时，是否自动从 Obsidian 官方 obsidian.json 发现 vault（默认 true）
+---@field sync_obsidian_config boolean 确定活跃 vault 后，是否自动同步该 vault 内 .obsidian/*.json 配置到插件（默认 true）
 ---@field notes_subdir string   新建笔记存放的子目录（相对当前活跃 vault）
 ---@field dailies_folder string 每日笔记目录（相对当前活跃 vault）
 ---@field templates_folder string 模板文件所在目录（相对当前活跃 vault）
@@ -33,14 +35,16 @@ local M = {}
 --- 插件默认配置，用户通过 M.setup(opts) 覆盖其中的部分字段。
 -- vault_path 为运行时内部字段，由 setup() 从 vaults_parent 扫描派生，无需手动设置。
 M.config = {
-  vaults_parent      = "",
-  default_vault      = "",
-  vault_path         = "",   -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
-  notes_subdir       = "Notes",
-  dailies_folder     = "Dailies",
-  templates_folder   = "Templates",
-  attachments_folder = "Assets",
-  daily_date_format  = "%Y-%m-%d",
+  vaults_parent        = "",
+  default_vault        = "",
+  auto_discover        = true,  -- vaults_parent 为空时，自动从 Obsidian 官方配置发现 vault
+  sync_obsidian_config = true,  -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
+  vault_path           = "",    -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
+  notes_subdir         = "Notes",
+  dailies_folder       = "Dailies",
+  templates_folder     = "Templates",
+  attachments_folder   = "Assets",
+  daily_date_format    = "%Y-%m-%d",
 
   --- Checkbox 循环切换状态列表（按顺序循环）。
   -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
@@ -231,13 +235,23 @@ end
 -- 副作用：
 --   1. 使用 vim.tbl_deep_extend 深度合并，用户只需提供要覆盖的字段。
 --   2. 展开 vaults_parent 中的 ~ 为实际 home 目录。
---   3. 扫描 vaults_parent 下含 .obsidian/ 的子目录，按 default_vault 或首个结果
---      设置内部字段 config.vault_path 和 active_vault_name。
---   4. 触发 User MiniObsidianSetup 事件，plugin/miniobsidian.lua 监听该事件
+--   3. 扫描 vaults_parent 下含 .obsidian/ 的子目录，或从 Obsidian 官方配置自动发现。
+--   4. 按 default_vault 或首个结果设置内部字段 config.vault_path 和 active_vault_name。
+--   5. 若 sync_obsidian_config 为 true，读取活跃 vault 内 .obsidian/*.json 并同步到配置。
+--   6. 触发 User MiniObsidianSetup 事件，plugin/miniobsidian.lua 监听该事件
 --      以注册 BufWritePost autocmd（延迟注册，确保 config 已就绪）。
 ---@param opts? MiniObsidian.Config 用户配置（部分字段覆盖默认值）
 function M.setup(opts)
-  M.config = vim.tbl_deep_extend("force", M.config, opts or {})
+  opts = opts or {}
+
+  -- 记录用户显式设置的配置 key，后续自动同步时跳过这些 key
+  -- 确保用户手动值优先级始终高于自动发现/同步的值
+  M._user_config_keys = {}
+  for k, _ in pairs(opts) do
+    M._user_config_keys[k] = true
+  end
+
+  M.config = vim.tbl_deep_extend("force", M.config, opts)
 
   -- 展开 vaults_parent 中的 ~ 和环境变量
   M.config.vaults_parent = vim.fn.expand(M.config.vaults_parent)
@@ -249,12 +263,13 @@ function M.setup(opts)
 
   if #vaults == 0 then
     vim.notify(
-      "[miniobsidian] vaults_parent 下未找到有效的 vault（需含 .obsidian/ 目录）: "
-        .. M.config.vaults_parent,
+      "[miniobsidian] 未找到有效的 vault。解决方法：\n"
+        .. "  1. 在 Obsidian 客户端中新建或打开一个 vault\n"
+        .. "  2. 手动配置 vaults_parent 指向 vault 的父目录",
       vim.log.levels.ERROR
     )
   else
-    -- 默认使用第一个 vault
+    -- 默认使用第一个 vault，后续可能被 obs-cli 默认配置覆盖
     local target = vaults[1]
 
     -- 若用户指定了 default_vault，尝试匹配
@@ -274,10 +289,24 @@ function M.setup(opts)
           vim.log.levels.WARN
         )
       end
+    else
     end
 
     M.config.vault_path = target.path
     M.active_vault_name = target.name
+
+    -- 同步 Obsidian vault 内配置（用户手动配置优先）
+    if M.config.sync_obsidian_config then
+      local ok, config_sync = pcall(require, "miniobsidian.config_sync")
+      if ok then
+        local overrides = config_sync.read_vault_config(target.path)
+        for key, value in pairs(overrides) do
+          if not M._user_config_keys[key] then
+            M.config[key] = value
+          end
+        end
+      end
+    end
   end
 
   -- 触发自定义 User 事件，通知 plugin/miniobsidian.lua 注册后续 autocmd。
