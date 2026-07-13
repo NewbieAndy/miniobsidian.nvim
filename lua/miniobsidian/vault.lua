@@ -31,6 +31,15 @@ function M.list_vaults(parent)
 
   -- parent 为空时，尝试从 Obsidian 官方配置自动发现
   if not parent or parent == "" then
+    local ok_core, core = pcall(require, "miniobsidian")
+    if ok_core and core.config and core.config.auto_discover == false then
+      vim.notify(
+        "[miniobsidian] vaults_parent 未设置且 auto_discover 已关闭",
+        vim.log.levels.ERROR
+      )
+      return {}
+    end
+
     local ok, config_sync = pcall(require, "miniobsidian.config_sync")
     if ok then
       local vaults = config_sync.discover_vaults()
@@ -129,6 +138,7 @@ end
 -- 当前活跃 vault 以 ● 标记，其余以 ○ 标记，方便视觉区分。
 function M.pick_and_switch()
   local core   = require("miniobsidian")
+  M.refresh_vaults()
   local vaults = M.list_vaults(core.config.vaults_parent)
 
   if #vaults == 0 then

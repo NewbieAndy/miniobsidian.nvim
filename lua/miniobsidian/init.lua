@@ -95,6 +95,9 @@ local _cache = nil
 --- 缓存时间戳：上次扫描时 os.time() 的值（秒级 Unix 时间戳）
 local _cache_time = 0
 
+--- 缓存版本号：每次重扫或失效递增，供补全源精确判断是否需要重建 items。
+local _cache_stamp = 0
+
 --- 缓存有效期（秒）。设为 5 秒：
 --   • 补全触发非常频繁，避免每次按键都调用 globpath（磁盘 I/O）。
 --   • 5 秒足够短，不会让新建/删除的笔记长时间不可见。
@@ -152,6 +155,7 @@ function M.get_all_notes(force)
 
   _cache = notes
   _cache_time = now
+  _cache_stamp = _cache_stamp + 1
   return _cache
 end
 
@@ -161,14 +165,15 @@ end
 function M.invalidate_cache()
   _cache = nil
   _cache_time = 0
+  _cache_stamp = _cache_stamp + 1
 end
 
---- 返回当前笔记路径缓存的时间戳（供 completion.lua 判断 items 缓存是否需要重建）。
--- 当 invalidate_cache() 被调用后返回 0；重新扫描后返回最新的 os.time() 值。
+--- 返回当前笔记路径缓存版本（供 completion.lua 判断 items 缓存是否需要重建）。
+-- 每次 invalidate_cache() 或重新扫描都会递增，避免同一秒内切换 vault 复用旧候选。
 -- 通过公开方法暴露，而非让外部模块直接访问私有变量 _cache_time。
----@return number 缓存时间戳（秒级 Unix 时间戳，0 表示无缓存）
+---@return number 缓存版本号
 function M.get_cache_stamp()
-  return _cache_time
+  return _cache_stamp
 end
 
 --- 从笔记绝对路径中提取文件 stem（文件名去掉 .md 后缀）。

@@ -109,8 +109,8 @@ function M._parse_obsidian_json(path)
     return {}
   end
 
+  local open_vaults = {}
   local vaults = {}
-  local default_vault = nil
 
   for _, entry in pairs(parsed.vaults) do
     if type(entry) == "table" and type(entry.path) == "string" and entry.path ~= "" then
@@ -123,19 +123,20 @@ function M._parse_obsidian_json(path)
       local v = { name = name, path = vault_path }
 
       if entry.open == true then
-        default_vault = v
+        table.insert(open_vaults, v)
       else
         table.insert(vaults, v)
       end
     end
   end
 
-  -- 按名称字母序排列其余 vault
+  -- 多个 Obsidian 客户端可同时让多个 vault 标记为 open=true。
+  -- open vault 只影响默认排序，不能吞掉其它同样打开中的 vault。
+  table.sort(open_vaults, function(a, b) return a.name < b.name end)
   table.sort(vaults, function(a, b) return a.name < b.name end)
 
-  -- 将 open = true 的 vault 插入首位（作为默认）
-  if default_vault then
-    table.insert(vaults, 1, default_vault)
+  for i = #open_vaults, 1, -1 do
+    table.insert(vaults, 1, open_vaults[i])
   end
 
   return vaults
