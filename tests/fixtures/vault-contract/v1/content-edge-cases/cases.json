@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "name": "empty",
+      "content_base64": "",
+      "encoding": "UTF-8",
+      "line_ending": "none",
+      "final_newline": false
+    },
+    {
+      "name": "lf",
+      "content_base64": "IyBOb3RlCg==",
+      "encoding": "UTF-8",
+      "line_ending": "LF",
+      "final_newline": true
+    },
+    {
+      "name": "crlf",
+      "content_base64": "IyBOb3RlDQo=",
+      "encoding": "UTF-8",
+      "line_ending": "CRLF",
+      "final_newline": true
+    },
+    {
+      "name": "bom",
+      "content_base64": "77u/IyBOb3RlCg==",
+      "encoding": "UTF-8-BOM",
+      "line_ending": "LF",
+      "final_newline": true
+    },
+    {
+      "name": "invalid-frontmatter",
+      "content_base64": "LS0tCnRpdGxlOiBbdW5jbG9zZWQKLS0tCgojIE5vdGUK",
+      "encoding": "UTF-8",
+      "metadata_error": "INVALID_FRONTMATTER"
+    }
+  ]
+}

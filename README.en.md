@@ -22,6 +22,20 @@ English · [中文](README.md)
 
 > **Inspired by** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) — a full-featured Obsidian client for Neovim. `miniobsidian.nvim` takes a lighter approach: no Telescope dependency, no heavy event system, just the features you actually use every day. If you need a more complete, battle-tested solution, use that instead.
 
+### Boundary with obs-cli
+
+The Markdown Vault is the single source of truth. Obsidian, [`obs-cli`](https://github.com/andy-neoaira/obs-cli), and `miniobsidian.nvim` are peer clients operating on the same Vault.
+
+- `miniobsidian.nvim` does not require `obs-cli`; all core features remain available without the CLI.
+- `obs-cli` does not depend on Neovim; AI agents use the CLI and scenario-oriented Skills for safe analysis, comparison, and updates.
+- Both projects share specifications for Vault paths, Wikilinks, Daily Notes, and concurrent writes without sharing a runtime dependency.
+- Any future CLI integration is an optional adapter for advanced capabilities, enabled through capability negotiation with safe fallback.
+- Official Obsidian configuration is used only for read-only discovery and settings synchronization; plugin-specific configuration remains owned by the plugin.
+
+See [`obs-cli` ADR-001: Agent-first Product Boundary and Three-client Architecture](https://github.com/andy-neoaira/obs-cli/blob/master/docs/architecture/ADR-001-agent-first-boundary.md) for the complete decision.
+
+Shared contract status: `target_contract = vault-contract/v1`, `implemented_contract = null`. The target rules are defined in [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md); conformance will be declared only after the P2 shared fixtures pass.
+
 ---
 
 ## Features

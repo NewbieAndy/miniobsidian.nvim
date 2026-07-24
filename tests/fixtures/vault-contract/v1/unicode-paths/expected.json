@@ -1,0 +1,22 @@
+{
+  "contract": "vault-contract/v1",
+  "case": "unicode-paths",
+  "assertions": [
+    {
+      "id": "note-ids",
+      "equals": [
+        "知识库/你好 世界",
+        "项目/Agent 优先"
+      ]
+    },
+    {
+      "id": "wikilink",
+      "source": "知识库/你好 世界",
+      "target": "项目/Agent 优先"
+    },
+    {
+      "id": "encoding",
+      "equals": "UTF-8"
+    }
+  ]
+}

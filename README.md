@@ -22,6 +22,20 @@
 
 > **灵感来源：** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) —— 一个功能完整的 Obsidian Neovim 客户端。`miniobsidian.nvim` 采用更轻量的设计哲学：无 Telescope 依赖、无复杂事件系统，只保留每天真正用到的功能。如需功能更全面、久经考验的方案，推荐使用该插件。
 
+### 与 obs-cli 的边界
+
+Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.com/andy-neoaira/obs-cli) 与 `miniobsidian.nvim` 是操作同一 Vault 的同级客户端。
+
+- `miniobsidian.nvim` 不强制依赖 `obs-cli`，所有基础功能在未安装 CLI 时仍完整可用。
+- `obs-cli` 不依赖 Neovim；AI Agent 通过 CLI 和场景化 Skills 进行安全的分析、比较和更新。
+- 两个项目共享 Vault、Wikilink、Daily Note 与并发写入规范，但不共享运行时依赖。
+- 未来如接入 CLI，只作为可选的高级能力适配器，并通过 capability 协商和安全降级启用。
+- Obsidian 官方配置只用于只读发现和设置同步，插件私有配置由插件自身管理。
+
+完整架构决策见 [`obs-cli` ADR-001：Agent-first 产品边界与三入口架构](https://github.com/andy-neoaira/obs-cli/blob/master/docs/architecture/ADR-001-agent-first-boundary.md)。
+
+共同规范状态：`target_contract = vault-contract/v1`，`implemented_contract = null`。目标规则见 [`obs-cli` Vault 共同约定](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md)；只有 P2 共享 fixture 通过后才会声明实现符合该版本。
+
 ---
 
 ## 功能一览

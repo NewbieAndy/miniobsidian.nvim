@@ -1,0 +1,14 @@
+{
+  "contract": "vault-contract/v1",
+  "case": "concurrent-update",
+  "assertions": [
+    {
+      "id": "stale-agent-write",
+      "read_revision_from": "base.md",
+      "disk_before_apply_from": "external.md",
+      "agent_content_from": "agent-proposed.md",
+      "error": "REVISION_CONFLICT",
+      "final_bytes_from": "external.md"
+    }
+  ]
+}

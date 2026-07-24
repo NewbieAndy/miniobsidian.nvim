@@ -1,0 +1,15 @@
+{
+  "contract": "vault-contract/v1",
+  "case": "content-edge-cases",
+  "assertions": [
+    {
+      "id": "preserve-byte-properties",
+      "source": "cases.json"
+    },
+    {
+      "id": "invalid-frontmatter-blocks-metadata-write",
+      "error": "INVALID_FRONTMATTER",
+      "bytes_unchanged": true
+    }
+  ]
+}

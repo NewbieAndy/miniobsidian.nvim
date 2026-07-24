@@ -1,0 +1,25 @@
+{
+  "contract": "vault-contract/v1",
+  "case": "symlink-escape",
+  "assertions": [
+    {
+      "id": "external-symlink",
+      "path": "Escape.md",
+      "error": "PATH_OUTSIDE_VAULT",
+      "rule": "VC-1.4"
+    },
+    {
+      "id": "internal-alias-read",
+      "path": "InternalAlias.md",
+      "allowed": true
+    },
+    {
+      "id": "physical-identity-conflict",
+      "paths": [
+        "Inside.md",
+        "InternalAlias.md"
+      ],
+      "mutation_allowed": false
+    }
+  ]
+}

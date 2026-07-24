@@ -1,0 +1,20 @@
+{
+  "contract": "vault-contract/v1",
+  "case": "duplicate-note-names",
+  "assertions": [
+    {
+      "id": "bare-name-is-ambiguous",
+      "query": "Index",
+      "error": "AMBIGUOUS_NOTE",
+      "candidates": [
+        "Areas/Index",
+        "Projects/Alpha/Index"
+      ]
+    },
+    {
+      "id": "path-is-exact",
+      "query": "Projects/Alpha/Index",
+      "equals": "Projects/Alpha/Index"
+    }
+  ]
+}

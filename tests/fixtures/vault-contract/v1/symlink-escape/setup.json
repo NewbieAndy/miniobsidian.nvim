@@ -1,0 +1,19 @@
+{
+  "operations": [
+    {
+      "action": "create-external-file",
+      "name": "outside-secret.md",
+      "content": "# Outside\n"
+    },
+    {
+      "action": "create-symlink",
+      "path": "Escape.md",
+      "target": "../outside-secret.md"
+    },
+    {
+      "action": "create-symlink",
+      "path": "InternalAlias.md",
+      "target": "Inside.md"
+    }
+  ]
+}
