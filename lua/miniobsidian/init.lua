@@ -35,21 +35,21 @@ local M = {}
 --- 插件默认配置，用户通过 M.setup(opts) 覆盖其中的部分字段。
 -- vault_path 为运行时内部字段，由 setup() 从 vaults_parent 扫描派生，无需手动设置。
 M.config = {
-  vaults_parent        = "",
-  default_vault        = "",
-  auto_discover        = true,  -- vaults_parent 为空时，自动从 Obsidian 官方配置发现 vault
-  sync_obsidian_config = true,  -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
-  vault_path           = "",    -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
-  notes_subdir         = "Notes",
-  dailies_folder       = "Dailies",
-  templates_folder     = "Templates",
-  attachments_folder   = "Assets",
-  daily_date_format    = "%Y-%m-%d",
+  vaults_parent = "",
+  default_vault = "",
+  auto_discover = true, -- vaults_parent 为空时，自动从 Obsidian 官方配置发现 vault
+  sync_obsidian_config = true, -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
+  vault_path = "", -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
+  notes_subdir = "Notes",
+  dailies_folder = "Dailies",
+  templates_folder = "Templates",
+  attachments_folder = "Assets",
+  daily_date_format = "%Y-%m-%d",
 
   --- Checkbox 循环切换状态列表（按顺序循环）。
   -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
   -- 可自定义：设为 { " ", "x" } 即回退到经典双态切换。
-  checkbox_states = { " ", "x"},
+  checkbox_states = { " ", "x" },
 
   ---@type fun(name: string, path: string)|nil
   on_vault_switch = nil,
@@ -143,14 +143,19 @@ function M.get_all_notes(force)
   local notes = {}
   -- 去掉 vault 末尾斜杠后加 "/"，确保无论 vault_path 是否带尾斜杠都能正确截取相对路径
   local vault_prefix = vault:gsub("/+$", "") .. "/"
-  local prefix_len = #vault_prefix + 1  -- sub(prefix_len) 从第一个非斜杠字符开始
+  local prefix_len = #vault_prefix + 1 -- sub(prefix_len) 从第一个非斜杠字符开始
   for _, p in ipairs(raw) do
     local rel = p:sub(prefix_len)
     local hidden = false
     for seg in rel:gmatch("[^/]+") do
-      if seg:sub(1, 1) == "." then hidden = true; break end
+      if seg:sub(1, 1) == "." then
+        hidden = true
+        break
+      end
     end
-    if not hidden then notes[#notes + 1] = p end
+    if not hidden then
+      notes[#notes + 1] = p
+    end
   end
 
   _cache = notes
@@ -196,7 +201,9 @@ end
 ---@param path string 要检查的文件路径（通常来自 nvim_buf_get_name）
 ---@return boolean 是否在 vault 内
 function M.in_vault(path)
-  if not path or path == "" then return false end
+  if not path or path == "" then
+    return false
+  end
   local vault = M.config.vault_path
 
   local vault_prefix = vault:sub(-1) == "/" and vault or vault .. "/"
@@ -226,7 +233,7 @@ function M.after_note_open(path, opts)
 
   vim.api.nvim_exec_autocmds("User", {
     pattern = "MiniObsidianNoteOpened",
-    data    = { path = path, opts = opts },
+    data = { path = path, opts = opts },
   })
 
   local cb = M.config.after_note_open
@@ -262,8 +269,8 @@ function M.setup(opts)
   M.config.vaults_parent = vim.fn.expand(M.config.vaults_parent)
 
   -- 扫描 vaults_parent，发现有效 vault 并设置初始活跃 vault
-  local vault  = require("miniobsidian.vault")
-  vault.refresh_vaults()   -- 清除旧缓存，确保本次 setup 使用最新扫描结果
+  local vault = require("miniobsidian.vault")
+  vault.refresh_vaults() -- 清除旧缓存，确保本次 setup 使用最新扫描结果
   local vaults = vault.list_vaults(M.config.vaults_parent)
 
   if #vaults == 0 then
@@ -283,18 +290,19 @@ function M.setup(opts)
       for _, v in ipairs(vaults) do
         if v.name == M.config.default_vault then
           target = v
-          found  = true
+          found = true
           break
         end
       end
       if not found then
         vim.notify(
-          "[miniobsidian] default_vault '" .. M.config.default_vault
-            .. "' 未找到，使用第一个 vault：" .. target.name,
+          "[miniobsidian] default_vault '"
+            .. M.config.default_vault
+            .. "' 未找到，使用第一个 vault："
+            .. target.name,
           vim.log.levels.WARN
         )
       end
-    else
     end
 
     M.config.vault_path = target.path

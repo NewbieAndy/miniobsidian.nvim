@@ -30,8 +30,8 @@ local M = {}
 ---@param title string   当前文件标题（用于替换 {{title}} / {{filename}}）
 ---@return string        替换完占位变量后的文本
 local function substitute(content, title)
-  local cfg  = require("miniobsidian").config
-  local now  = os.time()
+  local cfg = require("miniobsidian").config
+  local now = os.time()
 
   -- 使用用户配置的日期格式（默认 "%Y-%m-%d"）
   local date_str = os.date(cfg.daily_date_format, now)
@@ -44,36 +44,33 @@ local function substitute(content, title)
   -- 支持 Obsidian 风格格式：YYYY → %Y，MM → %m，DD → %d，HH → %H，mm → %M，ss → %S
   -- 注意：mm 必须在 ss 之前处理，互不干扰；YYYY/MM 等长格式先处理，防止 DD 吞掉 D
   content = content:gsub("{{date:([^}]+)}}", function(fmt)
-    local lua_fmt = fmt
-      :gsub("YYYY", "%%Y")
-      :gsub("MM",   "%%m")
-      :gsub("DD",   "%%d")
-      :gsub("HH",   "%%H")
-      :gsub("mm",   "%%M")
-      :gsub("ss",   "%%S")  -- 秒，必须在 mm→%M 之后添加，避免影响 mm 匹配
+    local lua_fmt =
+      fmt:gsub("YYYY", "%%Y"):gsub("MM", "%%m"):gsub("DD", "%%d"):gsub("HH", "%%H"):gsub("mm", "%%M"):gsub("ss", "%%S") -- 秒，必须在 mm→%M 之后添加，避免影响 mm 匹配
     return os.date(lua_fmt, now)
   end)
 
   -- 替换规则表：{ pattern, replacement_value }
   local replacements = {
-    { "{{[Dd]ate}}",        date_str },   -- {{date}} / {{Date}}
-    { "{{DATE}}",           date_str },   -- {{DATE}}
-    { "{{[Tt]ime}}",        time_str },   -- {{time}} / {{Time}}
-    { "{{TIME}}",           time_str },   -- {{TIME}}
-    { "{{[Tt]itle}}",       title    },   -- {{title}} / {{Title}}
-    { "{{TITLE}}",          title    },   -- {{TITLE}}
-    { "{{[Ff]ilename}}",    title    },   -- {{filename}} / {{Filename}}（= title）
-    { "{{FILENAME}}",       title    },   -- {{FILENAME}}
-    { "{{[Yy]esterday}}",   yest_str },   -- {{yesterday}} / {{Yesterday}}
-    { "{{YESTERDAY}}",      yest_str },   -- {{YESTERDAY}}
-    { "{{[Tt]omorrow}}",    tmrw_str },   -- {{tomorrow}} / {{Tomorrow}}
-    { "{{TOMORROW}}",       tmrw_str },   -- {{TOMORROW}}
+    { "{{[Dd]ate}}", date_str }, -- {{date}} / {{Date}}
+    { "{{DATE}}", date_str }, -- {{DATE}}
+    { "{{[Tt]ime}}", time_str }, -- {{time}} / {{Time}}
+    { "{{TIME}}", time_str }, -- {{TIME}}
+    { "{{[Tt]itle}}", title }, -- {{title}} / {{Title}}
+    { "{{TITLE}}", title }, -- {{TITLE}}
+    { "{{[Ff]ilename}}", title }, -- {{filename}} / {{Filename}}（= title）
+    { "{{FILENAME}}", title }, -- {{FILENAME}}
+    { "{{[Yy]esterday}}", yest_str }, -- {{yesterday}} / {{Yesterday}}
+    { "{{YESTERDAY}}", yest_str }, -- {{YESTERDAY}}
+    { "{{[Tt]omorrow}}", tmrw_str }, -- {{tomorrow}} / {{Tomorrow}}
+    { "{{TOMORROW}}", tmrw_str }, -- {{TOMORROW}}
   }
 
   for _, pair in ipairs(replacements) do
     local replacement = pair[2]
     -- 使用闭包返回替换字符串，规避 gsub 对 % 的特殊解释
-    content = content:gsub(pair[1], function() return replacement end)
+    content = content:gsub(pair[1], function()
+      return replacement
+    end)
   end
 
   return content
@@ -91,12 +88,14 @@ end
 -- 副作用：创建新文件（若已存在则直接打开，不覆盖）。
 ---@param name? string 模板名称（不含扩展名；为 nil 时弹出交互输入框）
 function M.new_template(name)
-  local cfg           = require("miniobsidian").config
+  local cfg = require("miniobsidian").config
   local templates_dir = cfg.vault_path .. "/" .. cfg.templates_folder
   vim.fn.mkdir(templates_dir, "p")
 
   local function do_create(input_name)
-    if not input_name or input_name == "" then return end
+    if not input_name or input_name == "" then
+      return
+    end
 
     -- 净化文件名：移除路径分隔符，防止目录穿越
     input_name = input_name:gsub("[/\\]", "-")
@@ -124,7 +123,9 @@ function M.new_template(name)
 
       local ok, err = pcall(function()
         local f = io.open(path, "w")
-        if not f then error("无法创建文件: " .. path) end
+        if not f then
+          error("无法创建文件: " .. path)
+        end
         f:write(skeleton)
         f:close()
       end)
@@ -158,7 +159,7 @@ end
 --   4. 通过 vim.schedule 在主循环中执行 buffer 插入操作。
 -- 副作用：修改当前 buffer 内容，移动光标到插入内容末尾。
 function M.insert()
-  local cfg           = require("miniobsidian").config
+  local cfg = require("miniobsidian").config
   local templates_dir = cfg.vault_path .. "/" .. cfg.templates_folder
 
   -- 递归扫描模板目录下所有 .md 文件（**/*.md 支持子文件夹，第三参数 false 不包含点开头）
@@ -166,15 +167,12 @@ function M.insert()
   local files = vim.fn.globpath(templates_dir, "**/*.md", false, true)
 
   if #files == 0 then
-    vim.notify(
-      "[miniobsidian] 模板目录为空或不存在: " .. templates_dir,
-      vim.log.levels.WARN
-    )
+    vim.notify("[miniobsidian] 模板目录为空或不存在: " .. templates_dir, vim.log.levels.WARN)
     return
   end
 
   -- 构建显示名称列表和名称→路径的映射表
-  local names        = {}
+  local names = {}
   local name_to_path = {}
   for _, path in ipairs(files) do
     -- ":t:r" modifier：:t 取文件名部分，:r 去掉扩展名
@@ -188,7 +186,7 @@ function M.insert()
   -- "%:t:r" 等价于 fnamemodify 的 ":t:r"
   local buf_name = vim.fn.expand("%:t:r")
   -- 新建 buffer 还未保存时 buf_name 为空字符串，此时用 "Untitled" 兜底
-  local title    = buf_name ~= "" and buf_name or "Untitled"
+  local title = buf_name ~= "" and buf_name or "Untitled"
 
   -- 选择 UI：优先使用 Snacks.picker.select（支持模糊搜索，体验更好）
   -- 若 snacks 不可用，回退到 Neovim 内置 vim.ui.select（可被 telescope 等替换）
@@ -207,18 +205,24 @@ function M.insert()
     prompt = "选择模板:",
   }, function(choice)
     -- choice 为 nil 表示用户取消选择（按 Esc 或关闭浮窗）
-    if not choice then return end
+    if not choice then
+      return
+    end
 
     local path = name_to_path[choice]
-    if not path then return end  -- 防御性检查，理论上不会触发
+    if not path then
+      return
+    end -- 防御性检查，理论上不会触发
 
     -- pcall 保护文件读取：
     --   • io.open 失败时返回 nil 而非抛出错误，需手动 error() 转为异常
     --   • 确保文件句柄在异常情况下也能被正确关闭（f:close() 已在 pcall 内）
     local ok, lines = pcall(function()
       local f = io.open(path, "r")
-      if not f then error("无法读取模板: " .. path) end
-      local content = f:read("*a")  -- "*a" 一次性读取全部内容
+      if not f then
+        error("无法读取模板: " .. path)
+      end
+      local content = f:read("*a") -- "*a" 一次性读取全部内容
       f:close()
       return content
     end)

@@ -31,9 +31,13 @@ local PASTE_SCRIPT = _M_DIR .. "scripts/paste_image.js"
 local function relative_path(from_dir, to_path)
   from_dir = from_dir:gsub("/$", "")
   local parts_from = vim.split(from_dir, "/", { plain = true })
-  local parts_to   = vim.split(to_path,  "/", { plain = true })
-  if parts_from[1] == "" then table.remove(parts_from, 1) end
-  if parts_to[1]   == "" then table.remove(parts_to,   1) end
+  local parts_to = vim.split(to_path, "/", { plain = true })
+  if parts_from[1] == "" then
+    table.remove(parts_from, 1)
+  end
+  if parts_to[1] == "" then
+    table.remove(parts_to, 1)
+  end
   local common = 0
   for i = 1, math.min(#parts_from, #parts_to) do
     if parts_from[i] == parts_to[i] then
@@ -109,10 +113,12 @@ function M.paste_img(name)
     -- ── 调用 osascript JXA 脚本 ────────────────────────────
     -- 使用列表形式传参，路径中的空格等特殊字符由 OS 进程 API 处理，无需 shell 转义。
     -- :wait() 同步等待（~120ms），对用户主动触发的粘贴操作完全可接受。
-    local proc = vim.system(
-      { "osascript", "-l", "JavaScript", PASTE_SCRIPT, base_path },
-      { text = true }   -- 确保 stdout/stderr 作为字符串返回
-    ):wait()
+    local proc = vim
+      .system(
+        { "osascript", "-l", "JavaScript", PASTE_SCRIPT, base_path },
+        { text = true } -- 确保 stdout/stderr 作为字符串返回
+      )
+      :wait()
 
     if proc.code ~= 0 then
       -- 解析 stderr 中的错误关键字，给出可读提示
@@ -122,12 +128,12 @@ function M.paste_img(name)
       elseif err:find("NOT_IMAGE_FILE") then
         vim.notify("[miniobsidian] 剪贴板中的文件不是图片格式", vim.log.levels.WARN)
       elseif err:find("WRITE_FAILED") then
+        vim.notify("[miniobsidian] 图片写入失败，请检查目录权限: " .. attach_dir, vim.log.levels.ERROR)
+      elseif err:find("CONVERT_FAILED") or err:find("BITMAP_FAILED") or err:find("TIFF_FAILED") then
         vim.notify(
-          "[miniobsidian] 图片写入失败，请检查目录权限: " .. attach_dir,
+          "[miniobsidian] 图片格式转换失败，剪贴板内容可能不是标准图片",
           vim.log.levels.ERROR
         )
-      elseif err:find("CONVERT_FAILED") or err:find("BITMAP_FAILED") or err:find("TIFF_FAILED") then
-        vim.notify("[miniobsidian] 图片格式转换失败，剪贴板内容可能不是标准图片", vim.log.levels.ERROR)
       else
         -- 兜底：截取 stderr 第一行作为错误信息
         local first_line = err:match("[^\n]+") or "未知错误"
@@ -138,7 +144,7 @@ function M.paste_img(name)
 
     -- 从 stdout 读取实际扩展名（"png" / "jpg" / "gif"）
     -- 使用模式匹配去除首尾空白，默认 "png" 作为安全兜底；:lower() 防御意外大写
-    local ext      = ((proc.stdout or ""):match("^%s*(%a+)%s*$") or "png"):lower()
+    local ext = ((proc.stdout or ""):match("^%s*(%a+)%s*$") or "png"):lower()
     local img_file = img_name .. "." .. ext
     local abs_path = base_path .. "." .. ext
 
@@ -167,17 +173,14 @@ function M.paste_img(name)
   if name ~= nil then
     do_paste(name)
   else
-    vim.ui.input(
-      {
-        prompt = "图片文件名（不含扩展名）: ",
-        default = os.date("image-%Y%m%d-%H%M%S"),
-      },
-      function(input)
-        if input ~= nil then
-          do_paste(input)
-        end
+    vim.ui.input({
+      prompt = "图片文件名（不含扩展名）: ",
+      default = os.date("image-%Y%m%d-%H%M%S"),
+    }, function(input)
+      if input ~= nil then
+        do_paste(input)
       end
-    )
+    end)
   end
 end
 

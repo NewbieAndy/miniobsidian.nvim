@@ -22,18 +22,19 @@ function M.toggle()
 
   -- nvim_win_get_cursor 返回 {row, col}，row 为 1-indexed。
   -- nvim_buf_get_lines / nvim_buf_set_lines 使用 0-indexed 行号，因此减 1。
-  local row  = vim.api.nvim_win_get_cursor(0)[1] - 1
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
 
   -- 读取当前行内容（第三参数 false 表示不严格检查越界，超出范围时返回空表）
   local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
 
   -- 安全检查：空 buffer 或光标越界时 line 可能为 nil
-  if not line then return end
+  if not line then
+    return
+  end
 
   -- 读取用户配置的状态列表；若配置未加载则回退到默认双态
   local ok, core = pcall(require, "miniobsidian")
-  local states = (ok and core.config and core.config.checkbox_states)
-    or { " ", "x" }
+  local states = (ok and core.config and core.config.checkbox_states) or { " ", "x" }
 
   -- ── 情况1：已有 checkbox（任意状态字符）→ 循环切换到下一个 ──
   -- pattern 分解：
@@ -51,8 +52,7 @@ function M.toggle()
         break
       end
     end
-    vim.api.nvim_buf_set_lines(buf, row, row + 1, false,
-      { prefix .. "[" .. next_state .. "]" .. suffix })
+    vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { prefix .. "[" .. next_state .. "]" .. suffix })
     return
   end
 
@@ -61,8 +61,7 @@ function M.toggle()
   -- 从而排除 [[wiki link]] 行被误升级为 checkbox 的情况。
   local plain_prefix, rest = line:match("^(%s*[-*+]%s+)([^%[].*)")
   if plain_prefix then
-    vim.api.nvim_buf_set_lines(buf, row, row + 1, false,
-      { plain_prefix .. "[" .. states[1] .. "] " .. rest })
+    vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { plain_prefix .. "[" .. states[1] .. "] " .. rest })
     return
   end
 
@@ -78,17 +77,21 @@ end
 -- 使用场景：将任务列表"降级"回普通列表，而不需要经过 toggle 循环一圈。
 -- 副作用：直接修改当前 buffer 对应行的内容（nvim_buf_set_lines）。
 function M.clear()
-  local buf  = vim.api.nvim_get_current_buf()
-  local row  = vim.api.nvim_win_get_cursor(0)[1] - 1
+  local buf = vim.api.nvim_get_current_buf()
+  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
   local line = vim.api.nvim_buf_get_lines(buf, row, row + 1, false)[1]
-  if not line then return end
+  if not line then
+    return
+  end
 
   -- 匹配含 checkbox 的列表行：捕获 marker 前缀和方括号之后的内容
   -- pattern：`^(%s*[-*+]%s+)%[[^%[%]]-%]%s?(.*)`
   --   %[[^%[%]]-%]  → 任意状态的 checkbox（排除 [ 和 ] 字符，防止误匹配 [[wiki]] 行）
   --   %s?           → 吃掉 checkbox 后紧跟的一个可选空格
   local prefix, rest = line:match("^(%s*[-*+]%s+)%[[^%[%]]-%]%s?(.*)")
-  if not prefix then return end   -- 非 checkbox 行，静默跳过
+  if not prefix then
+    return
+  end -- 非 checkbox 行，静默跳过
 
   vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { prefix .. rest })
 end

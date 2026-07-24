@@ -27,16 +27,15 @@ end
 ---@param parent? string vault 父目录的绝对路径（已展开 ~）；为空时尝试自动发现
 ---@return {name: string, path: string}[] 有效 vault 列表（可能为空）
 function M.list_vaults(parent)
-  if _vaults_cache then return _vaults_cache end   -- 命中缓存，直接返回
+  if _vaults_cache then
+    return _vaults_cache
+  end -- 命中缓存，直接返回
 
   -- parent 为空时，尝试从 Obsidian 官方配置自动发现
   if not parent or parent == "" then
     local ok_core, core = pcall(require, "miniobsidian")
     if ok_core and core.config and core.config.auto_discover == false then
-      vim.notify(
-        "[miniobsidian] vaults_parent 未设置且 auto_discover 已关闭",
-        vim.log.levels.ERROR
-      )
+      vim.notify("[miniobsidian] vaults_parent 未设置且 auto_discover 已关闭", vim.log.levels.ERROR)
       return {}
     end
 
@@ -48,10 +47,7 @@ function M.list_vaults(parent)
         return vaults
       end
     end
-    vim.notify(
-      "[miniobsidian] vaults_parent 未设置且自动发现未找到 vault",
-      vim.log.levels.ERROR
-    )
+    vim.notify("[miniobsidian] vaults_parent 未设置且自动发现未找到 vault", vim.log.levels.ERROR)
     return {}
   end
 
@@ -66,16 +62,16 @@ function M.list_vaults(parent)
     -- 跳过隐藏目录（如 .DS_Store 生成的 ._ 前缀条目）
     if not name:match("^%.") then
       local vault_path = parent .. "/" .. name
-      if vim.fn.isdirectory(vault_path) == 1
-        and vim.fn.isdirectory(vault_path .. "/.obsidian") == 1
-      then
+      if vim.fn.isdirectory(vault_path) == 1 and vim.fn.isdirectory(vault_path .. "/.obsidian") == 1 then
         table.insert(vaults, { name = name, path = vault_path })
       end
     end
   end
 
-  table.sort(vaults, function(a, b) return a.name < b.name end)
-  _vaults_cache = vaults   -- 存入缓存
+  table.sort(vaults, function(a, b)
+    return a.name < b.name
+  end)
+  _vaults_cache = vaults -- 存入缓存
   return vaults
 end
 
@@ -116,17 +112,14 @@ function M.do_switch(entry)
   -- 事件 data 携带新 vault 的 name 与 path，供回调使用。
   vim.api.nvim_exec_autocmds("User", {
     pattern = "MiniObsidianVaultSwitch",
-    data    = { name = entry.name, path = entry.path },
+    data = { name = entry.name, path = entry.path },
   })
 
   -- 调用用户配置的 on_vault_switch 回调（如果存在）
   if core.config.on_vault_switch then
     local cb_ok, cb_err = pcall(core.config.on_vault_switch, entry.name, entry.path)
     if not cb_ok then
-      vim.notify(
-        "[miniobsidian] on_vault_switch 回调执行失败: " .. tostring(cb_err),
-        vim.log.levels.WARN
-      )
+      vim.notify("[miniobsidian] on_vault_switch 回调执行失败: " .. tostring(cb_err), vim.log.levels.WARN)
     end
   end
 
@@ -137,7 +130,7 @@ end
 -- 优先使用 Snacks.picker.select（支持模糊搜索），不可用时回退到 vim.ui.select。
 -- 当前活跃 vault 以 ● 标记，其余以 ○ 标记，方便视觉区分。
 function M.pick_and_switch()
-  local core   = require("miniobsidian")
+  local core = require("miniobsidian")
   M.refresh_vaults()
   local vaults = M.list_vaults(core.config.vaults_parent)
 
@@ -150,7 +143,7 @@ function M.pick_and_switch()
   end
 
   -- 构造显示标签，并建立标签→条目的反向索引（供回调查找原始条目）
-  local labels        = {}
+  local labels = {}
   local label_to_entry = {}
 
   for _, v in ipairs(vaults) do
@@ -171,9 +164,13 @@ function M.pick_and_switch()
   end
 
   select_fn(labels, { prompt = "切换 Vault" }, function(choice)
-    if not choice then return end
+    if not choice then
+      return
+    end
     local entry = label_to_entry[choice]
-    if not entry then return end
+    if not entry then
+      return
+    end
     -- vim.schedule：规避 select 回调在 textlock 状态下调用 notify 等 API 的问题
     vim.schedule(function()
       M.do_switch(entry)

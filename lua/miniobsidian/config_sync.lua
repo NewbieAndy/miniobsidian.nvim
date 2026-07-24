@@ -33,15 +33,9 @@ function M._obsidian_config_paths()
       "~/.config/obsidian/obsidian.json",
     }
     -- Flatpak 安装路径
-    table.insert(
-      candidates,
-      home .. "/.var/app/md.obsidian.Obsidian/config/obsidian/obsidian.json"
-    )
+    table.insert(candidates, home .. "/.var/app/md.obsidian.Obsidian/config/obsidian/obsidian.json")
     -- Snap 安装路径（固定子目录）
-    table.insert(
-      candidates,
-      home .. "/snap/obsidian/current/.config/obsidian/obsidian.json"
-    )
+    table.insert(candidates, home .. "/snap/obsidian/current/.config/obsidian/obsidian.json")
     -- Snap 安装路径（带编号子目录，如 x1/）
     local snap_pattern = home .. "/snap/obsidian/*/.config/obsidian/obsidian.json"
     local ok, snap_matches = pcall(vim.fn.glob, snap_pattern, false, true)
@@ -102,10 +96,7 @@ function M._parse_obsidian_json(path)
 
   local ok, parsed = pcall(vim.json.decode, table.concat(content, "\n"))
   if not ok or type(parsed) ~= "table" or type(parsed.vaults) ~= "table" then
-    vim.notify(
-      "[miniobsidian] 无法解析 Obsidian 配置文件: " .. path,
-      vim.log.levels.WARN
-    )
+    vim.notify("[miniobsidian] 无法解析 Obsidian 配置文件: " .. path, vim.log.levels.WARN)
     return {}
   end
 
@@ -132,8 +123,12 @@ function M._parse_obsidian_json(path)
 
   -- 多个 Obsidian 客户端可同时让多个 vault 标记为 open=true。
   -- open vault 只影响默认排序，不能吞掉其它同样打开中的 vault。
-  table.sort(open_vaults, function(a, b) return a.name < b.name end)
-  table.sort(vaults, function(a, b) return a.name < b.name end)
+  table.sort(open_vaults, function(a, b)
+    return a.name < b.name
+  end)
+  table.sort(vaults, function(a, b)
+    return a.name < b.name
+  end)
 
   for i = #open_vaults, 1, -1 do
     table.insert(vaults, 1, open_vaults[i])
@@ -236,19 +231,19 @@ function M.moment_to_lua_date(moment_fmt)
   -- 例如 MM 必须在 M 之前，DD 必须在 D 之前，YYYY 必须在 YY 之前
   local replacements = {
     { "YYYY", "%Y" },
-    { "YY",   "%y" },
+    { "YY", "%y" },
     { "MMMM", "%B" },
-    { "MMM",  "%b" },
-    { "MM",   "%m" },
-    { "DD",   "%d" },
+    { "MMM", "%b" },
+    { "MM", "%m" },
+    { "DD", "%d" },
     { "dddd", "%A" },
-    { "ddd",  "%a" },
-    { "HH",   "%H" },
-    { "hh",   "%I" },
-    { "mm",   "%M" },
-    { "ss",   "%S" },
-    { "A",    "%p" },
-    { "a",    "%p" },
+    { "ddd", "%a" },
+    { "HH", "%H" },
+    { "hh", "%I" },
+    { "mm", "%M" },
+    { "ss", "%S" },
+    { "A", "%p" },
+    { "a", "%p" },
   }
 
   -- 第一遍：将所有 Moment 标记替换为唯一占位符

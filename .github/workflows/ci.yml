@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: stylua@2.5.2,selene@0.28.0
+      - run: make format-check
+      - run: make lint
+      - run: make fixture-check
+
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim: ["v0.10.4", "stable"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          version: ${{ matrix.neovim }}
+          neovim: true
+      - uses: actions/checkout@v4
+        with:
+          repository: nvim-lua/plenary.nvim
+          path: .deps/plenary.nvim
+      - run: make test PLENARY_DIR="$GITHUB_WORKSPACE/.deps/plenary.nvim"

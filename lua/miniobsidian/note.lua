@@ -14,8 +14,6 @@ local M = {}
 -- 私有工具函数
 -- ──────────────────────────────────────────────
 
-
-
 --- 根据笔记标题计算其目标文件路径，并确保父目录存在。
 -- 路径规则：{target_dir}/{note_id_func(title)}.md
 -- 若 target_dir 未指定，回退到 {vault_path}/{notes_subdir}。
@@ -25,7 +23,7 @@ local M = {}
 local function note_path(title, target_dir)
   local cfg = require("miniobsidian").config
   -- 使用用户配置的 ID 函数将标题转为文件名 slug
-  local id  = cfg.note_id_func(title)
+  local id = cfg.note_id_func(title)
   local dir = target_dir or (cfg.vault_path .. "/" .. cfg.notes_subdir)
 
   -- "p" 参数：递归创建所有中间目录（等同于 mkdir -p）
@@ -46,7 +44,7 @@ end
 ---@return string|nil dir 目标目录绝对路径（nil 表示无法从文件浏览器检测）
 local function get_dir_from_explorer()
   local current_win = vim.api.nvim_get_current_win()
-  local ft          = vim.bo.filetype
+  local ft = vim.bo.filetype
 
   -- ── 1. Snacks Explorer ────────────────────────────────────────────────
   -- snacks explorer 是基于 picker 的文件树（source = "explorer"）。
@@ -88,7 +86,7 @@ local function get_dir_from_explorer()
     local ok, manager = pcall(require, "neo-tree.sources.manager")
     if ok then
       local state = manager.get_state("filesystem")
-      local node  = state and state.tree and state.tree:get_node()
+      local node = state and state.tree and state.tree:get_node()
       if node and node.path then
         if node.type == "directory" then
           return node.path
@@ -122,9 +120,13 @@ local function get_dir_from_explorer()
   if ft == "oil" then
     local ok, oil = pcall(require, "oil")
     if ok then
-      local dir_ok, dir = pcall(function() return oil.get_current_dir() end)
+      local dir_ok, dir = pcall(function()
+        return oil.get_current_dir()
+      end)
       if dir_ok and dir then
-        local entry_ok, entry = pcall(function() return oil.get_cursor_entry() end)
+        local entry_ok, entry = pcall(function()
+          return oil.get_cursor_entry()
+        end)
         if entry_ok and entry and entry.type == "directory" and entry.name then
           -- 光标在子目录条目上：拼接进入子目录
           return (dir .. entry.name):gsub("/+$", "")
@@ -187,13 +189,10 @@ end
 ---@param dir string 目标目录绝对路径
 function M.new_note_in_dir(dir)
   local core = require("miniobsidian")
-  dir = dir:gsub("/+$", "")   -- 去除末尾多余斜杠，保持路径格式一致
+  dir = dir:gsub("/+$", "") -- 去除末尾多余斜杠，保持路径格式一致
 
   if not core.in_vault(dir) then
-    vim.notify(
-      "[miniobsidian] 目标目录不在当前 vault 内: " .. dir,
-      vim.log.levels.WARN
-    )
+    vim.notify("[miniobsidian] 目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
     return
   end
 
@@ -211,23 +210,19 @@ end
 --   • 未检测到任何文件浏览器  → 回退到 config.notes_subdir 并给出 INFO 提示
 function M.new_note_here()
   local core = require("miniobsidian")
-  local dir  = get_dir_from_explorer()
+  local dir = get_dir_from_explorer()
 
   if dir then
     dir = dir:gsub("/+$", "")
     if not core.in_vault(dir) then
-      vim.notify(
-        "[miniobsidian] 目标目录不在当前 vault 内: " .. dir,
-        vim.log.levels.WARN
-      )
+      vim.notify("[miniobsidian] 目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
       return
     end
   else
     -- 无法从文件浏览器检测，回退到默认 notes_subdir
     dir = core.config.vault_path .. "/" .. core.config.notes_subdir
     vim.notify(
-      "[miniobsidian] 未检测到文件树焦点，将创建到默认目录: "
-        .. core.config.notes_subdir,
+      "[miniobsidian] 未检测到文件树焦点，将创建到默认目录: " .. core.config.notes_subdir,
       vim.log.levels.INFO
     )
   end
@@ -238,7 +233,6 @@ function M.new_note_here()
     end
   end)
 end
-
 
 --- 执行笔记创建的核心逻辑（内部函数，也可供外部直接调用）。
 -- 行为：
@@ -253,8 +247,8 @@ end
 ---@param dir?  string 目标目录绝对路径（nil 时使用 notes_subdir）
 ---@param opts? { switch_root?: boolean }
 function M._create_note(title, dir, opts)
-  local path     = note_path(title, dir)
-  local cfg      = require("miniobsidian").config
+  local path = note_path(title, dir)
+  local cfg = require("miniobsidian").config
   local date_str = os.date(cfg.daily_date_format)
 
   local core = require("miniobsidian")
@@ -316,7 +310,7 @@ end
 -- 创建时使用 bare stem（路径的最后一段），避免 [[folder/note]] 把 "/" 带入文件名。
 ---@param stem string 从 [[...]] 提取的笔记名（可能含路径前缀）
 function M.follow_or_create(stem)
-  local core  = require("miniobsidian")
+  local core = require("miniobsidian")
   local notes = core.get_all_notes()
 
   -- 辅助：打开文件并跳转
@@ -329,7 +323,8 @@ function M.follow_or_create(stem)
   -- ── 1. 精确匹配 ────────────────────────────────────────────────
   for _, path in ipairs(notes) do
     if core.note_stem(path) == stem then
-      jump(path); return
+      jump(path)
+      return
     end
   end
 
@@ -338,7 +333,8 @@ function M.follow_or_create(stem)
   local stem_lower = stem:lower()
   for _, path in ipairs(notes) do
     if core.note_stem(path):lower() == stem_lower then
-      jump(path); return
+      jump(path)
+      return
     end
   end
 
@@ -360,7 +356,8 @@ function M.follow_or_create(stem)
     for _, path in ipairs(notes) do
       local s = core.note_stem(path)
       if s == bare or s:lower() == bare_lower then
-        jump(path); return
+        jump(path)
+        return
       end
     end
   end
@@ -379,7 +376,6 @@ function M.follow_or_create(stem)
     )
   end)
 end
-
 
 -- 快速切换与全文搜索仅遍历 Markdown 笔记文件。
 -- 搜索范围限定为 notes_subdir，避免把模板、附件等非笔记内容混入结果。
@@ -410,10 +406,10 @@ function M.quick_switch()
   end
 
   snacks.picker.files({
-    title  = "  Notes",
-    cwd    = notes_dir,
-    dirs   = { notes_dir },
-    ft     = MARKDOWN_EXTS,
+    title = "  Notes",
+    cwd = notes_dir,
+    dirs = { notes_dir },
+    ft = MARKDOWN_EXTS,
     hidden = false,
   })
 end
@@ -434,13 +430,13 @@ function M.search(query)
   end
 
   snacks.picker.grep({
-    title  = " Notes",
-    cwd    = notes_dir,
-    dirs   = { notes_dir },
+    title = " Notes",
+    cwd = notes_dir,
+    dirs = { notes_dir },
     search = query,
-    cmd    = "rg",
+    cmd = "rg",
     hidden = false,
-    glob   = "*.md",
+    glob = "*.md",
   })
 end
 

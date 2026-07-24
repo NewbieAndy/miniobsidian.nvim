@@ -20,10 +20,10 @@ local M = {}
 function M.open_today(opts)
   opts = opts or {}
   local core = require("miniobsidian")
-  local cfg  = core.config
+  local cfg = core.config
 
   local date_str = os.date(cfg.daily_date_format) --[[@as string]]
-  local dir      = cfg.vault_path .. "/" .. cfg.dailies_folder
+  local dir = cfg.vault_path .. "/" .. cfg.dailies_folder
 
   vim.fn.mkdir(dir, "p")
 
@@ -43,7 +43,9 @@ function M.open_today(opts)
     }
     local ok, err = pcall(function()
       local f = io.open(path, "w")
-      if not f then error("无法创建文件: " .. path) end
+      if not f then
+        error("无法创建文件: " .. path)
+      end
       f:write(table.concat(lines, "\n"))
       f:close()
     end)

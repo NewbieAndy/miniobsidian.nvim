@@ -37,14 +37,16 @@ function M.link_at_cursor()
     --   %]%]   → 字面 "]]"
     -- s, e 分别是整个 [[...]] 的起始/结束 1-indexed 位置
     local s, e, inner = line:find("%[%[(.-)%]%]", search_start)
-    if not s then break end   -- 行内无更多 wiki link，退出循环
+    if not s then
+      break
+    end -- 行内无更多 wiki link，退出循环
 
     -- 判断光标列是否落在当前 [[...]] 的范围内（含两端）
     if col >= s and col <= e then
       -- 提取笔记名：依次去除别名部分（| 及之后）和锚点部分（# 及之后）
       -- 注意：这里的 pattern 使用非贪婪配合可选字符，逐步剥离后缀
-      local name = inner:match("^([^|]+)|?") or inner  -- 取 | 之前
-      name = name:match("^([^#]+)#?") or name           -- 取 # 之前
+      local name = inner:match("^([^|]+)|?") or inner -- 取 | 之前
+      name = name:match("^([^#]+)#?") or name -- 取 # 之前
       -- 去除首尾空白（%s* 匹配零或多个空白，.- 惰性匹配中间内容）
       name = name:match("^%s*(.-)%s*$")
       -- 空字符串（如 [[]]）视为无效链接，返回 nil

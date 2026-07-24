@@ -1,1 +1,6 @@
-std = "lua51+vim"
+std = "vim"
+
+[lints]
+# Neovim embeds LuaJIT, which supports \xNN and \u{NNNN} escapes that
+# Selene's Lua 5.1 parser intentionally treats as extensions.
+bad_string_escape = "allow"

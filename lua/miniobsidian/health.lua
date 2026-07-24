@@ -1,27 +1,39 @@
 local M = {}
 
 local function get_health()
-  if vim.health then return vim.health end
+  if vim.health then
+    return vim.health
+  end
   local ok, h = pcall(require, "health")
-  if ok then return h end
+  if ok then
+    return h
+  end
   return nil
 end
 
 local function ver_ge(a, b)
-  if a.major ~= b.major then return a.major > b.major end
-  if a.minor ~= b.minor then return a.minor > b.minor end
+  if a.major ~= b.major then
+    return a.major > b.major
+  end
+  if a.minor ~= b.minor then
+    return a.minor > b.minor
+  end
   return a.patch >= b.patch
 end
 
 local function uname()
   local uv = vim.uv or vim.loop
-  if not uv or not uv.os_uname then return nil end
+  if not uv or not uv.os_uname then
+    return nil
+  end
   return uv.os_uname()
 end
 
 function M.check()
   local h = get_health()
-  if not h then return end
+  if not h then
+    return
+  end
 
   h.start("miniobsidian.nvim")
 

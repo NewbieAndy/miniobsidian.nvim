@@ -16,7 +16,9 @@
 -- ── 防止重复加载 ───────────────────────────────────────────────
 -- Neovim 在某些情况下（如 :source %、重新加载 runtimepath）会重复执行 plugin 目录下的文件。
 -- vim.g.loaded_miniobsidian 作为全局标记，确保本文件的注册逻辑只执行一次。
-if vim.g.loaded_miniobsidian then return end
+if vim.g.loaded_miniobsidian then
+  return
+end
 vim.g.loaded_miniobsidian = true
 
 -- ── 用户命令注册 ───────────────────────────────────────────────
@@ -29,14 +31,11 @@ vim.g.loaded_miniobsidian = true
 --   • 不提供（nargs="?"）：弹出 vim.ui.input 交互框让用户输入标题。
 -- 使用 !（bang）时不切换根目录，适合临时创建笔记。
 vim.api.nvim_create_user_command("ObsidianNew", function(opts)
-  require("miniobsidian.note").new_note(
-    opts.args ~= "" and opts.args or nil,
-    { switch_root = opts.bang }
-  )
+  require("miniobsidian.note").new_note(opts.args ~= "" and opts.args or nil, { switch_root = opts.bang })
 end, {
   nargs = "?",
-  bang  = true,
-  desc  = "新建 Obsidian 笔记（到默认 notes_subdir 目录）；! 同时切换根目录",
+  bang = true,
+  desc = "新建 Obsidian 笔记（到默认 notes_subdir 目录）；! 同时切换根目录",
 })
 
 --- :ObsidianNewHere
@@ -73,12 +72,10 @@ end, {
 -- query 可选：提供时作为初始搜索词填入浮窗输入框。
 -- 如需在选中文件后切换根目录，请在 after_note_open 或 BufEnter 回调中处理（参见 README）。
 vim.api.nvim_create_user_command("ObsidianSearch", function(opts)
-  require("miniobsidian.note").search(
-    opts.args ~= "" and opts.args or nil
-  )
+  require("miniobsidian.note").search(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc  = "全文搜索 vault",
+  desc = "全文搜索 vault",
 })
 
 --- :ObsidianTemplate
@@ -98,7 +95,7 @@ vim.api.nvim_create_user_command("ObsidianNewTemplate", function(opts)
   require("miniobsidian.template").new_template(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc  = "新建模板文件",
+  desc = "新建模板文件",
 })
 
 --- :ObsidianPasteImg [name]
@@ -112,7 +109,7 @@ vim.api.nvim_create_user_command("ObsidianPasteImg", function(opts)
   require("miniobsidian.image").paste_img(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc  = "粘贴剪贴板图片（macOS）",
+  desc = "粘贴剪贴板图片（macOS）",
 })
 
 --- :ObsidianToday[!]
@@ -140,7 +137,7 @@ end, { desc = "初始化 miniobsidian（使用默认配置）" })
 --   若在此处直接调用 setup()，config 尚未被用户覆盖，BufWritePost 会基于默认配置注册。
 --   等待 "MiniObsidianSetup" 事件确保用户的 setup(opts) 已经执行完毕。
 vim.api.nvim_create_autocmd("User", {
-  pattern  = "MiniObsidianSetup",
+  pattern = "MiniObsidianSetup",
   -- once = true 已移除：augroup clear = true 已保证幂等性，
   -- 移除后多次调用 setup() 时 autocmd 能正确重新注册，反映新配置。
   callback = function()
@@ -157,30 +154,32 @@ vim.api.nvim_create_autocmd("User", {
     --   get_completions 不会再被调用。
 
     vim.api.nvim_create_autocmd("TextChangedI", {
-      group   = augroup,
+      group = augroup,
       pattern = "*.md",
       callback = function(ev)
-        if not core.in_vault(vim.api.nvim_buf_get_name(ev.buf)) then return end
+        if not core.in_vault(vim.api.nvim_buf_get_name(ev.buf)) then
+          return
+        end
 
         local cursor = vim.api.nvim_win_get_cursor(0)
-        local line   = vim.api.nvim_get_current_line()
+        local line = vim.api.nvim_get_current_line()
         local before = line:sub(1, cursor[2])
-        local after  = line:sub(cursor[2] + 1)
+        local after = line:sub(cursor[2] + 1)
 
         -- [[ 进入点：before 以 "[[" 结尾，且 after 为空或仅为 "]]"
-        local just_entered_wikilink = before:match("%[%[$") ~= nil
-                                   and (after == "" or after == "]]")
+        local just_entered_wikilink = before:match("%[%[$") ~= nil and (after == "" or after == "]]")
 
         -- - [ 进入点：before 匹配 checkbox 触发，且 after 为空或仅为 "]"
-        local just_entered_checkbox = (before:match("^%s*[-*+]%s+%[$") ~= nil
-                                    or before:match("^%s*[-*+]%[$")    ~= nil)
-                                   and (after == "" or after == "]")
+        local just_entered_checkbox = (before:match("^%s*[-*+]%s+%[$") ~= nil or before:match("^%s*[-*+]%[$") ~= nil)
+          and (after == "" or after == "]")
 
         if just_entered_wikilink then
           local ok, blink = pcall(require, "blink.cmp")
           -- 限定 miniobsidian + buffer：笔记链接上下文里 buffer 词语有参考价值，
           -- 排除 copilot / LSP / snippets 避免无关候选干扰
-          if ok and blink.show then blink.show({ providers = { "miniobsidian", "buffer" } }) end
+          if ok and blink.show then
+            blink.show({ providers = { "miniobsidian", "buffer" } })
+          end
         elseif just_entered_checkbox then
           local ok, blink = pcall(require, "blink.cmp")
           -- 限定仅 miniobsidian provider：
@@ -198,8 +197,8 @@ vim.api.nvim_create_autocmd("User", {
     -- 这确保新建/删除/重命名笔记后，补全候选列表能在 CACHE_TTL(5秒) 内更新。
     -- 使用 BufWritePost（写入完成后）而非 BufWritePre，确保文件已落盘后再刷新。
     vim.api.nvim_create_autocmd("BufWritePost", {
-      group   = augroup,
-      pattern = "*.md",  -- 仅监听 Markdown 文件（通配符，不限于 vault 内）
+      group = augroup,
+      pattern = "*.md", -- 仅监听 Markdown 文件（通配符，不限于 vault 内）
       callback = function(ev)
         -- 进一步过滤：只对 vault 内的文件刷新缓存（vault 外的 md 文件不影响补全列表）
         if core.in_vault(vim.api.nvim_buf_get_name(ev.buf)) then
