@@ -9,6 +9,7 @@
 --           内部辅助：M._create_note(title, dir?)（供测试或外部调用）
 -- ============================================================
 local M = {}
+local path_policy = require("miniobsidian.path")
 
 -- ──────────────────────────────────────────────
 -- 私有工具函数
@@ -19,16 +20,32 @@ local M = {}
 -- 若 target_dir 未指定，回退到 {vault_path}/{notes_subdir}。
 ---@param title string 笔记标题
 ---@param target_dir? string 目标目录绝对路径（nil 时使用 notes_subdir）
----@return string filepath 笔记文件的完整绝对路径
+---@return string|nil filepath 笔记文件的完整绝对路径
+---@return string|nil error
 local function note_path(title, target_dir)
   local cfg = require("miniobsidian").config
   -- 使用用户配置的 ID 函数将标题转为文件名 slug
   local id = cfg.note_id_func(title)
-  local dir = target_dir or (cfg.vault_path .. "/" .. cfg.notes_subdir)
+  local directory, err
+  if target_dir then
+    directory, err = path_policy.resolve(cfg.vault_path, target_dir, {
+      allow_absolute = true,
+      allow_empty = true,
+    })
+  else
+    directory, err = path_policy.resolve(cfg.vault_path, cfg.notes_subdir, { allow_empty = true })
+  end
+  if not directory then
+    return nil, err
+  end
 
-  -- "p" 参数：递归创建所有中间目录（等同于 mkdir -p）
-  vim.fn.mkdir(dir, "p")
-  return dir .. "/" .. id .. ".md"
+  local logical = directory.logical == "" and (id .. ".md") or (directory.logical .. "/" .. id .. ".md")
+  local target, target_err = path_policy.resolve(cfg.vault_path, logical)
+  if not target then
+    return nil, target_err
+  end
+  vim.fn.mkdir(vim.fn.fnamemodify(target.path, ":h"), "p")
+  return target.path
 end
 
 -- ──────────────────────────────────────────────
@@ -220,7 +237,12 @@ function M.new_note_here()
     end
   else
     -- 无法从文件浏览器检测，回退到默认 notes_subdir
-    dir = core.config.vault_path .. "/" .. core.config.notes_subdir
+    local resolved, err = path_policy.resolve(core.config.vault_path, core.config.notes_subdir, { allow_empty = true })
+    if not resolved then
+      vim.notify("[miniobsidian] 默认笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
+      return
+    end
+    dir = resolved.path
     vim.notify(
       "[miniobsidian] 未检测到文件树焦点，将创建到默认目录: " .. core.config.notes_subdir,
       vim.log.levels.INFO
@@ -247,7 +269,11 @@ end
 ---@param dir?  string 目标目录绝对路径（nil 时使用 notes_subdir）
 ---@param opts? { switch_root?: boolean }
 function M._create_note(title, dir, opts)
-  local path = note_path(title, dir)
+  local path, path_err = note_path(title, dir)
+  if not path then
+    vim.notify("[miniobsidian] 笔记路径不安全: " .. tostring(path_err), vim.log.levels.ERROR)
+    return
+  end
   local cfg = require("miniobsidian").config
   local date_str = os.date(cfg.daily_date_format)
 
@@ -386,10 +412,12 @@ local MARKDOWN_EXTS = { "md" }
 ---@return string notes_dir 笔记目录绝对路径（无末尾斜杠）
 local function get_notes_dir()
   local cfg = require("miniobsidian").config
-  if cfg.notes_subdir and cfg.notes_subdir ~= "" then
-    return cfg.vault_path .. "/" .. cfg.notes_subdir
+  local resolved, err = path_policy.resolve(cfg.vault_path, cfg.notes_subdir or "", { allow_empty = true })
+  if not resolved then
+    vim.notify("[miniobsidian] 笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
+    return nil
   end
-  return cfg.vault_path
+  return resolved.path
 end
 
 -- 以 vault_path 为工作目录，打开文件模糊搜索浮窗。
@@ -398,6 +426,9 @@ end
 --       如需在选中文件后自动切换根目录，请在调用方注册 BufEnter 事件，参见 README。
 function M.quick_switch()
   local notes_dir = get_notes_dir()
+  if not notes_dir then
+    return
+  end
 
   local ok, snacks = pcall(require, "snacks")
   if not ok then
@@ -422,6 +453,9 @@ end
 ---@param query? string 初始搜索词（可选；传 nil 时浮窗为空输入状态）
 function M.search(query)
   local notes_dir = get_notes_dir()
+  if not notes_dir then
+    return
+  end
 
   local ok, snacks = pcall(require, "snacks")
   if not ok then

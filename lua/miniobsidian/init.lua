@@ -126,6 +126,7 @@ function M.get_all_notes(force)
   end
 
   local vault = M.config.vault_path
+  local path_policy = require("miniobsidian.path")
 
   -- 检查 vault 目录是否存在，isdirectory 返回 0 表示不存在或是文件
   if vim.fn.isdirectory(vault) == 0 then
@@ -142,18 +143,9 @@ function M.get_all_notes(force)
   -- 避免 .obsidian/、.git/ 等目录下的 .md 文件混入笔记列表。
   local notes = {}
   -- 去掉 vault 末尾斜杠后加 "/"，确保无论 vault_path 是否带尾斜杠都能正确截取相对路径
-  local vault_prefix = vault:gsub("/+$", "") .. "/"
-  local prefix_len = #vault_prefix + 1 -- sub(prefix_len) 从第一个非斜杠字符开始
   for _, p in ipairs(raw) do
-    local rel = p:sub(prefix_len)
-    local hidden = false
-    for seg in rel:gmatch("[^/]+") do
-      if seg:sub(1, 1) == "." then
-        hidden = true
-        break
-      end
-    end
-    if not hidden then
+    local resolved = path_policy.resolve(vault, p, { allow_absolute = true })
+    if resolved then
       notes[#notes + 1] = p
     end
   end
@@ -204,10 +196,7 @@ function M.in_vault(path)
   if not path or path == "" then
     return false
   end
-  local vault = M.config.vault_path
-
-  local vault_prefix = vault:sub(-1) == "/" and vault or vault .. "/"
-  return vim.startswith(path, vault_prefix) or path == vault
+  return require("miniobsidian.path").is_within_vault(M.config.vault_path, path)
 end
 
 --- 统一通知入口。

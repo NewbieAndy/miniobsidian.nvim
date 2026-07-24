@@ -30,7 +30,7 @@ describe("miniobsidian init", function()
       auto_discover = false,
       sync_obsidian_config = false,
     })
-    assert.equals(configured, core.config.vault_path)
+    assert.equals(require("miniobsidian.path").realpath(configured), core.config.vault_path)
     assert.equals("Personal", core.active_vault_name)
     helpers.cleanup(parent)
   end)

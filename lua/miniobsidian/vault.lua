@@ -6,6 +6,7 @@
 -- 对外 API：M.list_vaults(parent)、M.refresh_vaults()、M.do_switch(entry)、M.pick_and_switch()
 -- ============================================================
 local M = {}
+local path_policy = require("miniobsidian.path")
 
 -- vault 列表缓存：首次扫描后存储，避免每次打开切换器都重复读磁盘。
 -- 调用 M.refresh_vaults() 或 setup() 可主动清除缓存。
@@ -63,7 +64,10 @@ function M.list_vaults(parent)
     if not name:match("^%.") then
       local vault_path = parent .. "/" .. name
       if vim.fn.isdirectory(vault_path) == 1 and vim.fn.isdirectory(vault_path .. "/.obsidian") == 1 then
-        table.insert(vaults, { name = name, path = vault_path })
+        local real = path_policy.realpath(vault_path)
+        if real then
+          table.insert(vaults, { name = name, path = real })
+        end
       end
     end
   end
@@ -84,7 +88,12 @@ end
 ---@param entry {name: string, path: string} 目标 vault 条目
 function M.do_switch(entry)
   local core = require("miniobsidian")
-  core.config.vault_path = entry.path
+  local real = path_policy.realpath(entry.path)
+  if not real or vim.fn.isdirectory(path_policy.join(real, ".obsidian")) == 0 then
+    vim.notify("[miniobsidian] 无法切换到无效 Vault: " .. tostring(entry.path), vim.log.levels.ERROR)
+    return
+  end
+  core.config.vault_path = real
   core.active_vault_name = entry.name
   core.invalidate_cache()
 
@@ -92,7 +101,7 @@ function M.do_switch(entry)
   if core.config.sync_obsidian_config then
     local ok, config_sync = pcall(require, "miniobsidian.config_sync")
     if ok then
-      local overrides = config_sync.read_vault_config(entry.path)
+      local overrides = config_sync.read_vault_config(real)
       for key, value in pairs(overrides) do
         if not core._user_config_keys or not core._user_config_keys[key] then
           core.config[key] = value
@@ -103,7 +112,7 @@ function M.do_switch(entry)
 
   -- 同步 Neovim 全局工作目录，确保 snacks.picker / neo-tree / root 缓存等
   -- 依赖 cwd 的工具能感知到 vault 已切换。
-  local ok, err = pcall(vim.api.nvim_set_current_dir, entry.path)
+  local ok, err = pcall(vim.api.nvim_set_current_dir, real)
   if not ok then
     vim.notify("[miniobsidian] 切换工作目录失败: " .. tostring(err), vim.log.levels.WARN)
   end
@@ -112,12 +121,12 @@ function M.do_switch(entry)
   -- 事件 data 携带新 vault 的 name 与 path，供回调使用。
   vim.api.nvim_exec_autocmds("User", {
     pattern = "MiniObsidianVaultSwitch",
-    data = { name = entry.name, path = entry.path },
+    data = { name = entry.name, path = real },
   })
 
   -- 调用用户配置的 on_vault_switch 回调（如果存在）
   if core.config.on_vault_switch then
-    local cb_ok, cb_err = pcall(core.config.on_vault_switch, entry.name, entry.path)
+    local cb_ok, cb_err = pcall(core.config.on_vault_switch, entry.name, real)
     if not cb_ok then
       vim.notify("[miniobsidian] on_vault_switch 回调执行失败: " .. tostring(cb_err), vim.log.levels.WARN)
     end

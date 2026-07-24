@@ -21,4 +21,11 @@ describe("note", function()
     assert.equals('title: "Agent Test"', lines[2])
     assert.equals("# Agent Test", lines[7])
   end)
+
+  it("rejects an escaping notes directory", function()
+    require("miniobsidian").config.notes_subdir = "../Outside"
+    require("miniobsidian.note")._create_note("Escape")
+    vim.wait(50)
+    assert.equals(0, vim.fn.filereadable(vim.fn.fnamemodify(vault, ":h") .. "/Outside/escape.md"))
+  end)
 end)

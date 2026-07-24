@@ -9,6 +9,7 @@
 -- ============================================================
 
 local M = {}
+local path_policy = require("miniobsidian.path")
 
 --- 打开（或创建）今日每日笔记。
 -- 行为：
@@ -23,11 +24,14 @@ function M.open_today(opts)
   local cfg = core.config
 
   local date_str = os.date(cfg.daily_date_format) --[[@as string]]
-  local dir = cfg.vault_path .. "/" .. cfg.dailies_folder
-
-  vim.fn.mkdir(dir, "p")
-
-  local path = dir .. "/" .. date_str .. ".md"
+  local logical = cfg.dailies_folder == "" and (date_str .. ".md") or (cfg.dailies_folder .. "/" .. date_str .. ".md")
+  local resolved, resolve_err = path_policy.resolve(cfg.vault_path, logical)
+  if not resolved then
+    vim.notify("[miniobsidian] Daily Note 路径不安全: " .. tostring(resolve_err), vim.log.levels.ERROR)
+    return
+  end
+  local path = resolved.path
+  vim.fn.mkdir(vim.fn.fnamemodify(path, ":h"), "p")
 
   local is_new = vim.fn.filereadable(path) == 0
   if is_new then

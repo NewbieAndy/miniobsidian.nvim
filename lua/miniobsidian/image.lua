@@ -11,6 +11,7 @@
 -- 对外 API：M.paste_img(name)
 -- ============================================================
 local M = {}
+local path_policy = require("miniobsidian.path")
 
 -- ── 平台检测（模块加载时一次性完成，避免每次调用重复检测）────────
 local IS_MACOS = vim.fn.has("mac") == 1
@@ -104,11 +105,22 @@ function M.paste_img(name)
     -- 用户若误带扩展名（如 "photo.png"），剔除以避免双后缀
     img_name = img_name:gsub("%.[a-zA-Z0-9]+$", "")
 
-    local attach_dir = cfg.vault_path .. "/" .. cfg.attachments_folder
+    local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.attachments_folder, { allow_empty = true })
+    if not directory then
+      vim.notify("[miniobsidian] 附件目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+      return
+    end
+    local attach_dir = directory.path
     vim.fn.mkdir(attach_dir, "p")
 
     -- base_path 不含扩展名：JXA 脚本检测格式后追加正确后缀并返回
-    local base_path = attach_dir .. "/" .. img_name
+    local logical = directory.logical == "" and img_name or (directory.logical .. "/" .. img_name)
+    local target, target_err = path_policy.resolve(cfg.vault_path, logical)
+    if not target then
+      vim.notify("[miniobsidian] 附件路径不安全: " .. tostring(target_err), vim.log.levels.ERROR)
+      return
+    end
+    local base_path = target.path
 
     -- ── 调用 osascript JXA 脚本 ────────────────────────────
     -- 使用列表形式传参，路径中的空格等特殊字符由 OS 进程 API 处理，无需 shell 转义。
@@ -157,7 +169,7 @@ function M.paste_img(name)
       rel_path = relative_path(buf_dir, abs_path)
     else
       -- buffer 未保存时回退：使用相对于 vault 根的路径
-      rel_path = cfg.attachments_folder .. "/" .. img_file
+      rel_path = directory.logical == "" and img_file or (directory.logical .. "/" .. img_file)
     end
 
     -- 插入 Markdown 图片链接到光标下方，并将光标移到新行

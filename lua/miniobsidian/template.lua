@@ -7,6 +7,7 @@
 -- 对外 API：M.new_template()、M.insert()
 -- ============================================================
 local M = {}
+local path_policy = require("miniobsidian.path")
 
 -- ──────────────────────────────────────────────
 -- 私有工具函数
@@ -89,7 +90,12 @@ end
 ---@param name? string 模板名称（不含扩展名；为 nil 时弹出交互输入框）
 function M.new_template(name)
   local cfg = require("miniobsidian").config
-  local templates_dir = cfg.vault_path .. "/" .. cfg.templates_folder
+  local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.templates_folder, { allow_empty = true })
+  if not directory then
+    vim.notify("[miniobsidian] 模板目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    return
+  end
+  local templates_dir = directory.path
   vim.fn.mkdir(templates_dir, "p")
 
   local function do_create(input_name)
@@ -100,7 +106,14 @@ function M.new_template(name)
     -- 净化文件名：移除路径分隔符，防止目录穿越
     input_name = input_name:gsub("[/\\]", "-")
 
-    local path = templates_dir .. "/" .. input_name .. ".md"
+    local logical = directory.logical == "" and (input_name .. ".md")
+      or (directory.logical .. "/" .. input_name .. ".md")
+    local target, target_err = path_policy.resolve(cfg.vault_path, logical)
+    if not target then
+      vim.notify("[miniobsidian] 模板路径不安全: " .. tostring(target_err), vim.log.levels.ERROR)
+      return
+    end
+    local path = target.path
 
     -- 若文件已存在直接打开，不覆盖
     if vim.fn.filereadable(path) == 0 then
@@ -160,7 +173,12 @@ end
 -- 副作用：修改当前 buffer 内容，移动光标到插入内容末尾。
 function M.insert()
   local cfg = require("miniobsidian").config
-  local templates_dir = cfg.vault_path .. "/" .. cfg.templates_folder
+  local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.templates_folder, { allow_empty = true })
+  if not directory then
+    vim.notify("[miniobsidian] 模板目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    return
+  end
+  local templates_dir = directory.path
 
   -- 递归扫描模板目录下所有 .md 文件（**/*.md 支持子文件夹，第三参数 false 不包含点开头）
   -- 常见用法：Templates/Daily/*.md, Templates/Projects/*.md 等子目录结构
@@ -175,11 +193,14 @@ function M.insert()
   local names = {}
   local name_to_path = {}
   for _, path in ipairs(files) do
-    -- ":t:r" modifier：:t 取文件名部分，:r 去掉扩展名
-    -- 示例："/vault/Templates/daily.md" → "daily"
-    local name = vim.fn.fnamemodify(path, ":t:r")
-    table.insert(names, name)
-    name_to_path[name] = path
+    local safe = path_policy.resolve(cfg.vault_path, path, { allow_absolute = true })
+    if safe then
+      -- ":t:r" modifier：:t 取文件名部分，:r 去掉扩展名
+      -- 示例："/vault/Templates/daily.md" → "daily"
+      local name = vim.fn.fnamemodify(path, ":t:r")
+      table.insert(names, name)
+      name_to_path[name] = safe.path
+    end
   end
 
   -- 获取当前 buffer 文件名（不含路径和扩展名）作为 {{title}} 的替换值

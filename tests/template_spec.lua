@@ -20,4 +20,12 @@ describe("template", function()
     end)
     assert.equals("title: {{title}}", vim.fn.readfile(path)[2])
   end)
+
+  it("rejects an escaping templates directory", function()
+    require("miniobsidian").config.templates_folder = "../Outside"
+    require("miniobsidian.template").new_template("Escape")
+    vim.wait(50)
+    local path = vim.fn.fnamemodify(vault, ":h") .. "/Outside/Escape.md"
+    assert.equals(0, vim.fn.filereadable(path))
+  end)
 end)
