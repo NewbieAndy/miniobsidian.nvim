@@ -3,7 +3,12 @@ describe("link", function()
     vim.cmd("enew!")
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { "See [[Folder/Note#Heading|Alias]] now" })
     vim.api.nvim_win_set_cursor(0, { 1, 10 })
-    assert.equals("Folder/Note", require("miniobsidian.link").link_at_cursor())
+    local link = require("miniobsidian.link")
+    assert.equals("Folder/Note", link.link_at_cursor())
+    assert.same(
+      { target = "Folder/Note", alias = "Alias", heading = "Heading", block = nil },
+      link.wikilink_at_cursor()
+    )
   end)
 
   it("returns nil outside a wikilink", function()

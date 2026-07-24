@@ -22,10 +22,10 @@ local path_policy = require("miniobsidian.path")
 ---@param target_dir? string 目标目录绝对路径（nil 时使用 notes_subdir）
 ---@return string|nil filepath 笔记文件的完整绝对路径
 ---@return string|nil error
-local function note_path(title, target_dir)
+local function note_path(title, target_dir, explicit_id)
   local cfg = require("miniobsidian").config
   -- 使用用户配置的 ID 函数将标题转为文件名 slug
-  local id = cfg.note_id_func(title)
+  local id = explicit_id or cfg.note_id_func(title)
   local directory, err
   if target_dir then
     directory, err = path_policy.resolve(cfg.vault_path, target_dir, {
@@ -184,7 +184,7 @@ end
 -- 笔记始终创建到 config.notes_subdir 目录（快捷创建，无需关心归档位置）。
 -- 副作用：调用 vim.ui.input 时会短暂暂停等待用户输入。
 ---@param title? string 笔记标题（可选；为 nil 或 "" 时弹出交互输入框）
----@param opts? { switch_root?: boolean }
+---@param opts? { switch_root?: boolean, note_id?: string }
 function M.new_note(title, opts)
   opts = opts or {}
 
@@ -269,7 +269,8 @@ end
 ---@param dir?  string 目标目录绝对路径（nil 时使用 notes_subdir）
 ---@param opts? { switch_root?: boolean }
 function M._create_note(title, dir, opts)
-  local path, path_err = note_path(title, dir)
+  opts = opts or {}
+  local path, path_err = note_path(title, dir, opts.note_id)
   if not path then
     vim.notify("[miniobsidian] 笔记路径不安全: " .. tostring(path_err), vim.log.levels.ERROR)
     return
@@ -328,75 +329,71 @@ end
 --- 在 vault 内按 stem 查找笔记文件，找到则跳转；找不到则提示用户确认后创建。
 -- 供 link.lua 的 follow_link_or_toggle() 调用。
 --
--- 匹配策略（按优先级依次尝试，任一命中即跳转）：
---   1. 精确 stem 匹配          — [[my-note]]     → my-note.md
---   2. 大小写不敏感匹配        — [[My Note]]     → my note.md / My-Note.md
---   3. 路径末尾段匹配          — [[folder/note]] → note.md（剥离 Obsidian 路径前缀）
---
--- 创建时使用 bare stem（路径的最后一段），避免 [[folder/note]] 把 "/" 带入文件名。
----@param stem string 从 [[...]] 提取的笔记名（可能含路径前缀）
-function M.follow_or_create(stem)
+-- 目录 target 按 Vault 相对 Note ID 精确解析；basename 重名时要求用户显式选择。
+-- 不存在的目录 target 会在用户确认后保留原目录和文件名创建。
+---@param input string|table Wikilink target 或解析结果
+function M.follow_or_create(input)
   local core = require("miniobsidian")
   local notes = core.get_all_notes()
-
-  -- 辅助：打开文件并跳转
-  local function jump(path)
-    vim.schedule(function()
-      vim.cmd("edit " .. vim.fn.fnameescape(path))
-    end)
-  end
-
-  -- ── 1. 精确匹配 ────────────────────────────────────────────────
-  for _, path in ipairs(notes) do
-    if core.note_stem(path) == stem then
-      jump(path)
-      return
-    end
-  end
-
-  -- ── 2. 大小写不敏感匹配 ────────────────────────────────────────
-  -- 处理 [[My Note]] → my-note.md，以及 Obsidian 自动补全生成的混合大小写链接
-  local stem_lower = stem:lower()
-  for _, path in ipairs(notes) do
-    if core.note_stem(path):lower() == stem_lower then
-      jump(path)
-      return
-    end
-  end
-
-  -- ── 3. 剥离路径前缀后再匹配 ────────────────────────────────────
-  -- Obsidian 允许 [[folder/note]] 指向特定路径；提取最后一段作为 bare stem，
-  -- 避免把 "/" 带入文件名（note_id_func 会将其剔除，导致笔记名拼接错误）
-  local bare = stem:match("([^/\\]+)$") or stem
-
-  -- 防御：stem 若全为路径分隔符（如 "/"），match 返回 nil，or 后仍为 "/"，
-  -- note_id_func 剔除 "/" 后会生成空字符串 → ".md" 隐藏文件。此处直接拒绝。
-  if not bare or bare == "" or bare:match("^[/\\]+$") then
-    vim.notify("[miniobsidian] 无法解析链接目标: " .. stem, vim.log.levels.WARN)
+  local wikilink = require("miniobsidian.wikilink")
+  local link = type(input) == "table" and input or wikilink.parse(input)
+  if not link then
+    vim.notify("[miniobsidian] 无法解析链接目标", vim.log.levels.WARN)
     return
   end
 
-  -- 只在 bare != stem 时做第三轮匹配（避免与前两轮重复）
-  if bare ~= stem then
-    local bare_lower = bare:lower()
-    for _, path in ipairs(notes) do
-      local s = core.note_stem(path)
-      if s == bare or s:lower() == bare_lower then
-        jump(path)
-        return
+  local function jump(path)
+    local line, fragment_err = wikilink.locate_fragment(path, link)
+    vim.schedule(function()
+      vim.cmd("edit " .. vim.fn.fnameescape(path))
+      if line then
+        vim.api.nvim_win_set_cursor(0, { line, 0 })
+      elseif fragment_err then
+        vim.notify(
+          "[miniobsidian] 链接片段不存在: " .. (link.heading or ("^" .. link.block)),
+          vim.log.levels.WARN
+        )
       end
-    end
+    end)
   end
 
-  -- ── 未找到：提示创建 ────────────────────────────────────────────
-  -- 用 bare stem 作标题，防止路径字符污染文件名
-  local create_title = bare
+  local resolved, resolve_err = wikilink.resolve(link, notes, core.config.vault_path)
+  if resolved then
+    jump(resolved.path)
+    return
+  end
+
+  if resolve_err.code == "AMBIGUOUS_NOTE" then
+    vim.ui.select(resolve_err.candidates, { prompt = "选择同名笔记:" }, function(choice)
+      if choice then
+        local selected = wikilink.resolve({ target = choice }, notes, core.config.vault_path)
+        if selected then
+          jump(selected.path)
+        end
+      end
+    end)
+    return
+  end
+
+  local target = link.target
+  local bare = target:match("([^/]+)$")
+  if not bare or bare == "" then
+    vim.notify("[miniobsidian] 无法解析链接目标: " .. target, vim.log.levels.WARN)
+    return
+  end
+  local parent_id = target:match("^(.*)/[^/]+$") or ""
+  local directory, directory_err = path_policy.resolve(core.config.vault_path, parent_id, { allow_empty = true })
+  if not directory then
+    vim.notify("[miniobsidian] 链接创建路径不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    return
+  end
+
   vim.schedule(function()
     vim.ui.input(
-      { prompt = "笔记 '" .. create_title .. "' 不存在，按 Enter 确认创建（Esc 取消）: " },
-      function(input)
-        if input ~= nil then
-          M._create_note(create_title)
+      { prompt = "笔记 '" .. target .. "' 不存在，按 Enter 确认创建（Esc 取消）: " },
+      function(confirmation)
+        if confirmation ~= nil then
+          M._create_note(bare, directory.path, { note_id = bare })
         end
       end
     )

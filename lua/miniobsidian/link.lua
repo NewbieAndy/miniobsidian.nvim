@@ -9,6 +9,7 @@
 --           已废弃：M.follow_link()、M.follow_link_or_gf()
 -- ============================================================
 local M = {}
+local wikilink = require("miniobsidian.wikilink")
 
 --- 检测光标当前是否位于一个 [[wiki link]] 内，若是则返回链接目标笔记名。
 -- 算法：遍历当前行所有 [[...]] 区间，检查光标列是否落在某个区间内。
@@ -20,8 +21,8 @@ local M = {}
 --   [[笔记名|显示文字]]           → 带别名链接（提取 | 之前的部分）
 --   [[笔记名#标题]]               → 带章节锚点（提取 # 之前的部分）
 --   [[笔记名#标题|显示文字]]      → 组合格式
----@return string|nil note_name 笔记名（已去除首尾空白），或 nil
-function M.link_at_cursor()
+---@return table|nil
+function M.wikilink_at_cursor()
   local line = vim.api.nvim_get_current_line()
 
   -- nvim_win_get_cursor 返回 {row, col}，col 为 0-indexed 字节偏移。
@@ -43,14 +44,7 @@ function M.link_at_cursor()
 
     -- 判断光标列是否落在当前 [[...]] 的范围内（含两端）
     if col >= s and col <= e then
-      -- 提取笔记名：依次去除别名部分（| 及之后）和锚点部分（# 及之后）
-      -- 注意：这里的 pattern 使用非贪婪配合可选字符，逐步剥离后缀
-      local name = inner:match("^([^|]+)|?") or inner -- 取 | 之前
-      name = name:match("^([^#]+)#?") or name -- 取 # 之前
-      -- 去除首尾空白（%s* 匹配零或多个空白，.- 惰性匹配中间内容）
-      name = name:match("^%s*(.-)%s*$")
-      -- 空字符串（如 [[]]）视为无效链接，返回 nil
-      return name ~= "" and name or nil
+      return wikilink.parse(inner)
     end
 
     -- 从当前链接结束位置之后继续搜索下一个
@@ -58,6 +52,12 @@ function M.link_at_cursor()
   end
 
   return nil
+end
+
+---@return string|nil
+function M.link_at_cursor()
+  local parsed = M.wikilink_at_cursor()
+  return parsed and parsed.target or nil
 end
 
 --- 智能复合操作：光标在 wiki link 上时跳转，否则切换 checkbox 状态。
@@ -70,9 +70,9 @@ end
 --   • 普通列表项               → toggle() 内部升级为 checkbox
 --   • 其他行                   → 静默跳过
 function M.follow_link_or_toggle()
-  local stem = M.link_at_cursor()
-  if stem then
-    require("miniobsidian.note").follow_or_create(stem)
+  local parsed = M.wikilink_at_cursor()
+  if parsed then
+    require("miniobsidian.note").follow_or_create(parsed)
     return
   end
   require("miniobsidian.checkbox").toggle()

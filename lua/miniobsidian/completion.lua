@@ -102,7 +102,7 @@ end
 
 -- wikilink items 缓存（只缓存无 textEdit 的"骨架"，range 每次按实时光标填入）
 -- blink 文档明确："blink.cmp will mutate the items you return"
--- 因此缓存的是原始数据（_stem / label / detail），返回时在 final_items 中重新构建——安全
+-- 因此缓存的是原始数据（_target / label / detail），返回时在 final_items 中重新构建——安全
 local _items_cache = nil -- CompletionItem 骨架数组，nil 表示尚未构建
 local _items_cache_stamp = -1 -- 上次构建对应的 core.get_cache_stamp()，用于失效检测
 
@@ -178,7 +178,7 @@ function M:get_completions(ctx, callback)
             filterText = label, -- 与 label 一致，blink 模糊过滤基于此字段
             kind = ItemKind.File, -- 显示文件图标，语义清晰
             detail = detail, -- 菜单右侧灰色文字
-            _stem = stem, -- 私有字段：插入 [[stem]] 而不是 [[label]]
+            _target = stem_count[stem] > 1 and rel:gsub("%.md$", "") or stem,
             _path = path, -- 私有字段：resolve() 时读取笔记内容用
           })
         end
@@ -196,10 +196,10 @@ function M:get_completions(ctx, callback)
           kind = item.kind,
           detail = item.detail,
           insertTextFormat = PlainText,
-          _stem = item._stem, -- 保留私有字段供 resolve() 方法使用
+          _target = item._target,
           _path = item._path,
           textEdit = {
-            newText = "[[" .. item._stem .. "]]",
+            newText = "[[" .. item._target .. "]]",
             range = {
               start = { line = wl.row0, character = wl.start_byte },
               ["end"] = { line = wl.row0, character = wl.end_byte },
