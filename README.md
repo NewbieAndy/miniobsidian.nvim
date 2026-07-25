@@ -29,12 +29,16 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 - `miniobsidian.nvim` 不强制依赖 `obs-cli`，所有基础功能在未安装 CLI 时仍完整可用。
 - `obs-cli` 不依赖 Neovim；AI Agent 通过 CLI 和场景化 Skills 进行安全的分析、比较和更新。
 - 两个项目共享 Vault、Wikilink、Daily Note 与并发写入规范，但不共享运行时依赖。
-- 未来如接入 CLI，只作为可选的高级能力适配器，并通过 capability 协商和安全降级启用。
+- CLI 已作为可选高级能力 Adapter 接入；插件同时校验 `obs-cli/v2`、
+  `vault-contract/v1` 和所需 operation，不兼容时安全降级为纯插件模式。
 - Obsidian 官方配置只用于只读发现和设置同步，插件私有配置由插件自身管理。
 
 完整架构决策见 [`obs-cli` ADR-001：Agent-first 产品边界与三入口架构](https://github.com/andy-neoaira/obs-cli/blob/master/docs/architecture/ADR-001-agent-first-boundary.md)。
 
-共同规范状态：`target_contract = vault-contract/v1`，`implemented_contract = null`。目标规则见 [`obs-cli` Vault 共同约定](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md)；只有 P2 共享 fixture 通过后才会声明实现符合该版本。
+共同规范状态：`target_contract = vault-contract/v1`，
+`implemented_contract = vault-contract/v1`。两项目通过同一组固定 fixture 验证路径、
+Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
+[`obs-cli` Vault 共同约定](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md)。
 
 ---
 
@@ -321,8 +325,8 @@ require("miniobsidian").setup({
 - Daily Note 默认目录为 Vault 根、无模板时创建空文件，行为与 Obsidian 官方配置和 `vault-contract/v1` 一致。
 - 快速切换与搜索默认仍使用 `notes_subdir`；设置 `picker_scope = "vault"` 可覆盖整个 Vault。
 - `obs-cli` 是可选高级能力。`auto` 模式只异步执行
-  `capabilities --output json`；CLI 缺失、超时、非法 JSON 或协议不兼容都不会影响插件
-  本地功能。Adapter 只使用结构化 argv，不经过 shell 插值。
+  `capabilities --output json`；CLI 缺失、超时、非法 JSON、协议或 Vault 共同规范
+  不兼容都不会影响插件本地功能。Adapter 只使用结构化 argv，不经过 shell 插值。
 - `:ObsidianMove` 仅在 `note.get` 与 `note.move` capability 可用时工作。它会先读取
   revision、执行 dry-run 并展示完整计划，只有用户选择 `Apply` 后才携带
   `revision + plan_hash` 提交；未保存 buffer 会在任何 CLI 移动前被拒绝。

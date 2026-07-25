@@ -17,6 +17,7 @@ local function fake_cli()
   local capabilities = envelope("capabilities.get", {
     cli_version = "v2.0.0-rc.1",
     protocol_versions = { "obs-cli/v2" },
+    vault_contract = { target = "vault-contract/v1", implemented = "vault-contract/v1" },
     operations = {
       { name = "note.get", version = 1, mutating = false },
       { name = "note.patch", version = 1, mutating = true },

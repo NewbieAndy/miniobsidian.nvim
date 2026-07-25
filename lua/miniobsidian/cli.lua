@@ -1,6 +1,7 @@
 local M = {}
 
 local PROTOCOL = "obs-cli/v2"
+local VAULT_CONTRACT = "vault-contract/v1"
 
 local state = {
   status = "disabled",
@@ -10,6 +11,7 @@ local state = {
   operations = {},
   cli_version = nil,
   protocol_version = nil,
+  vault_contract = nil,
   checked_at = nil,
 }
 
@@ -47,6 +49,7 @@ local function reset(next_status, reason, err)
     operations = {},
     cli_version = nil,
     protocol_version = nil,
+    vault_contract = nil,
     checked_at = os.time(),
   }
 end
@@ -179,6 +182,17 @@ function M.refresh(callback)
       return
     end
 
+    local contract = envelope.data.vault_contract
+    if type(contract) ~= "table" or contract.implemented ~= VAULT_CONTRACT then
+      err = adapter_error("CLI_VAULT_CONTRACT_INCOMPATIBLE", "obs-cli Vault contract is incompatible", {
+        expected = VAULT_CONTRACT,
+        actual = type(contract) == "table" and contract.implemented or nil,
+      })
+      reset("incompatible", err.message, err)
+      notify(callback, M.state(), nil)
+      return
+    end
+
     local operations = {}
     for _, operation in ipairs(envelope.data.operations or {}) do
       if type(operation) == "table" and type(operation.name) == "string" then
@@ -193,6 +207,7 @@ function M.refresh(callback)
       operations = operations,
       cli_version = envelope.data.cli_version,
       protocol_version = envelope.protocol_version,
+      vault_contract = contract.implemented,
       checked_at = os.time(),
     }
     notify(callback, M.state(), nil)

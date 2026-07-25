@@ -25,7 +25,8 @@ Required:
 Optional:
   - blink.cmp (wiki link / checkbox completion)
   - osascript (macOS only, for image pasting)
-  - obs-cli >= v2 with obs-cli/v2 capabilities (advanced integrations only)
+  - obs-cli V2 with obs-cli/v2 + vault-contract/v1 capabilities
+    (advanced integrations only)
 
 Health check:
   :checkhealth miniobsidian

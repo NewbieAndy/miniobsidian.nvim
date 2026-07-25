@@ -8,6 +8,7 @@ local compatible_capabilities = vim.json.encode({
   data = {
     cli_version = "v2.0.0-rc.1",
     protocol_versions = { "obs-cli/v2" },
+    vault_contract = { target = "vault-contract/v1", implemented = "vault-contract/v1" },
     operations = {
       { name = "note.get", version = 1, mutating = false },
       { name = "note.patch", version = 1, mutating = true },
@@ -195,6 +196,24 @@ describe("optional obs-cli adapter", function()
     assert.is_false(started)
     assert.equals("CLI_PROTOCOL_INCOMPATIBLE", err.code)
     assert.equals(0, vim.fn.filereadable(mutation_marker))
+  end)
+
+  it("rejects an incompatible Vault contract before exposing operations", function()
+    local incompatible = vim.json.decode(compatible_capabilities)
+    incompatible.data.vault_contract.implemented = "vault-contract/v0"
+    local command = track(fake_cli({
+      "#!/bin/sh",
+      ("printf '%%s\\n' '%s'"):format(vim.json.encode(incompatible)),
+    }))
+
+    local core = require("miniobsidian")
+    core.config.cli = { enabled = true, command = command, timeout_ms = 3000 }
+    local cli = require("miniobsidian.cli")
+    local checked = await_refresh(cli)
+
+    assert.equals("incompatible", checked.status)
+    assert.equals("CLI_VAULT_CONTRACT_INCOMPATIBLE", checked.error.code)
+    assert.is_false(cli.available("note.get"))
   end)
 
   it("downgrades safely on timeout and invalid JSON", function()

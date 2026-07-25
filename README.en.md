@@ -29,12 +29,17 @@ The Markdown Vault is the single source of truth. Obsidian, [`obs-cli`](https://
 - `miniobsidian.nvim` does not require `obs-cli`; all core features remain available without the CLI.
 - `obs-cli` does not depend on Neovim; AI agents use the CLI and scenario-oriented Skills for safe analysis, comparison, and updates.
 - Both projects share specifications for Vault paths, Wikilinks, Daily Notes, and concurrent writes without sharing a runtime dependency.
-- Any future CLI integration is an optional adapter for advanced capabilities, enabled through capability negotiation with safe fallback.
+- The CLI is integrated only as an optional advanced-capability adapter. The plugin
+  checks `obs-cli/v2`, `vault-contract/v1`, and each required operation, then safely
+  falls back to standalone mode when they are incompatible.
 - Official Obsidian configuration is used only for read-only discovery and settings synchronization; plugin-specific configuration remains owned by the plugin.
 
 See [`obs-cli` ADR-001: Agent-first Product Boundary and Three-client Architecture](https://github.com/andy-neoaira/obs-cli/blob/master/docs/architecture/ADR-001-agent-first-boundary.md) for the complete decision.
 
-Shared contract status: `target_contract = vault-contract/v1`, `implemented_contract = null`. The target rules are defined in [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md); conformance will be declared only after the P2 shared fixtures pass.
+Shared contract status: `target_contract = vault-contract/v1`,
+`implemented_contract = vault-contract/v1`. Both projects validate path, Wikilink,
+Daily Note, Frontmatter, and concurrent-update behavior against the same pinned
+fixtures. See [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-cli/blob/master/docs/spec/VAULT_CONVENTIONS.md).
 
 ---
 
@@ -326,8 +331,9 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 - Daily Notes default to the Vault root and create an empty file without a template, matching Obsidian and `vault-contract/v1`.
 - Quick switch and search still default to `notes_subdir`; set `picker_scope = "vault"` for the whole Vault.
 - `obs-cli` is optional. Auto mode only runs `capabilities --output json`
-  asynchronously. A missing CLI, timeout, invalid JSON, or incompatible protocol never
-  disables local plugin features. The adapter uses structured argv without shell interpolation.
+  asynchronously. A missing CLI, timeout, invalid JSON, incompatible protocol, or incompatible
+  Vault contract never disables local plugin features. The adapter uses structured argv without
+  shell interpolation.
 - `:ObsidianMove` works only when the `note.get` and `note.move` capabilities are
   available. It reads the revision, previews a dry-run plan, and submits the exact
   `revision + plan_hash` only after the user selects `Apply`. Unsaved buffers are rejected
