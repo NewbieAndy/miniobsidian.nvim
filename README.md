@@ -255,6 +255,14 @@ require("miniobsidian").setup({
   -- 切换 Vault 默认不修改 cwd；设为 true 时只执行 tab-local :tcd
   change_cwd_on_switch = false,
 
+  -- 可选 obs-cli adapter；插件本地功能始终不依赖 CLI
+  -- false：禁用；"auto"：存在时异步探测（默认）；true：显式启用，失败在 health 中告警
+  cli = {
+    enabled = "auto",
+    command = "obs-cli", -- 单个 executable 路径，不是 shell 命令字符串
+    timeout_ms = 3000,
+  },
+
   -- Checkbox 循环状态序列（按配置顺序切换，可使用上方状态参考表中的任意字符）
   -- 极简双态：{ " ", "x" }
   -- 扩展版本：{ " ", "/", "x", "-", ">", "!", "?" }
@@ -303,6 +311,9 @@ require("miniobsidian").setup({
 - Vault 切换默认不再修改全局 cwd。需要 cwd 联动时启用 `change_cwd_on_switch = true`（tab-local），或使用 `on_vault_switch` / `after_note_open` 回调。
 - Daily Note 默认目录为 Vault 根、无模板时创建空文件，行为与 Obsidian 官方配置和 `vault-contract/v1` 一致。
 - 快速切换与搜索默认仍使用 `notes_subdir`；设置 `picker_scope = "vault"` 可覆盖整个 Vault。
+- `obs-cli` 是可选高级能力。`auto` 模式只异步执行
+  `capabilities --output json`；CLI 缺失、超时、非法 JSON 或协议不兼容都不会影响插件
+  本地功能。Adapter 只使用结构化 argv，不经过 shell 插值。
 
 ---
 
@@ -320,6 +331,7 @@ require("miniobsidian").setup({
 | `:ObsidianPasteImg [文件名]` | 可选 | 粘贴剪贴板图片（macOS）；省略则弹出输入框 |
 | `:ObsidianToday[!]` | 无 | 打开/创建今日笔记；`!` 向 `after_note_open` 传递 `switch_root=true` |
 | `:ObsidianResolveConflict` | 无 | 处理当前笔记的外部修改：查看 diff、保留 buffer 或重新加载磁盘 |
+| `:ObsidianCLIRefresh` | 无 | 异步刷新可选 obs-cli capability 缓存 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
 ---

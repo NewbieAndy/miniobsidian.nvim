@@ -57,6 +57,8 @@ describe("miniobsidian init", function()
     assert.equals("Notes", core.config.notes_subdir)
     assert.equals("notes", core.config.picker_scope)
     assert.is_false(core.config.change_cwd_on_switch)
+    assert.equals("auto", core.config.cli.enabled)
+    assert.equals("obs-cli", core.config.cli.command)
     helpers.cleanup(parent)
   end)
 
@@ -66,7 +68,8 @@ describe("miniobsidian init", function()
     config.picker_scope = "somewhere"
     config.external_check_interval_ms = -1
     config.notes_subdir = "../outside"
+    config.cli.enabled = "sometimes"
     local errors = core.validate_config(config)
-    assert.equals(3, #errors)
+    assert.equals(4, #errors)
   end)
 end)

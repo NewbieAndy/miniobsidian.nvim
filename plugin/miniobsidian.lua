@@ -8,7 +8,8 @@
 -- 依赖关系：miniobsidian（init）、miniobsidian.note、miniobsidian.template、
 --           miniobsidian.image、miniobsidian.daily（均为延迟 require）
 -- 对外 API：用户命令 ObsidianNew / ObsidianSwitch / ObsidianSearch /
---           ObsidianTemplate / ObsidianPasteImg / ObsidianToday / ObsidianSetup
+--           ObsidianTemplate / ObsidianPasteImg / ObsidianToday /
+--           ObsidianCLIRefresh / ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
 -- ============================================================
@@ -132,6 +133,14 @@ end, { desc = "初始化 miniobsidian（使用默认配置）" })
 vim.api.nvim_create_user_command("ObsidianResolveConflict", function()
   require("miniobsidian.external_changes").prompt(vim.api.nvim_get_current_buf(), true)
 end, { desc = "处理当前笔记的外部修改冲突" })
+
+--- :ObsidianCLIRefresh
+-- 异步刷新可选 obs-cli capability 缓存；不会阻塞 UI，也不会影响本地笔记功能。
+vim.api.nvim_create_user_command("ObsidianCLIRefresh", function()
+  require("miniobsidian.cli").refresh(function(state)
+    require("miniobsidian").notify(("obs-cli status: %s"):format(state.status))
+  end)
+end, { desc = "刷新可选 obs-cli capability 缓存" })
 
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
 -- 监听 miniobsidian.init.setup() 触发的自定义事件 "MiniObsidianSetup"，

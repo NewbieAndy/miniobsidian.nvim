@@ -22,6 +22,11 @@ function M.configure(vault)
   core.config.watch_external_changes = true
   core.config.change_cwd_on_switch = false
   core.config.picker_scope = "notes"
+  core.config.cli = {
+    enabled = false,
+    command = "obs-cli",
+    timeout_ms = 3000,
+  }
   core.invalidate_cache()
   return core
 end

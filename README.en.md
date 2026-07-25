@@ -259,6 +259,15 @@ require("miniobsidian").setup({
   -- Vault switching leaves cwd unchanged by default; true uses tab-local :tcd only.
   change_cwd_on_switch = false,
 
+  -- Optional obs-cli adapter; local plugin features never depend on the CLI.
+  -- false: disabled; "auto": probe asynchronously when present (default);
+  -- true: explicitly enabled, with failures surfaced by :checkhealth.
+  cli = {
+    enabled = "auto",
+    command = "obs-cli", -- One executable path, never a shell command string.
+    timeout_ms = 3000,
+  },
+
   -- Checkbox cycle states (toggle cycles through these in order).
   -- Minimal two-state: { " ", "x" }
   -- Extended:          { " ", "/", "x", "-", ">", "!", "?" }
@@ -307,6 +316,9 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 - Vault switching no longer changes global cwd. Enable `change_cwd_on_switch = true` for tab-local cwd, or use `on_vault_switch` / `after_note_open`.
 - Daily Notes default to the Vault root and create an empty file without a template, matching Obsidian and `vault-contract/v1`.
 - Quick switch and search still default to `notes_subdir`; set `picker_scope = "vault"` for the whole Vault.
+- `obs-cli` is optional. Auto mode only runs `capabilities --output json`
+  asynchronously. A missing CLI, timeout, invalid JSON, or incompatible protocol never
+  disables local plugin features. The adapter uses structured argv without shell interpolation.
 
 ---
 
@@ -324,6 +336,7 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianPasteImg [name]` | optional | Paste clipboard image (macOS); prompts if omitted |
 | `:ObsidianToday[!]` | none | Open/create today's note; `!` passes `switch_root=true` to `after_note_open` |
 | `:ObsidianResolveConflict` | none | Resolve the current note's external change: diff, keep buffer, or reload disk |
+| `:ObsidianCLIRefresh` | none | Refresh the optional obs-cli capability cache asynchronously |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
 ---

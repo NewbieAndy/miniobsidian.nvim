@@ -25,6 +25,7 @@ Required:
 Optional:
   - blink.cmp (wiki link / checkbox completion)
   - osascript (macOS only, for image pasting)
+  - obs-cli >= v2 with obs-cli/v2 capabilities (advanced integrations only)
 
 Health check:
   :checkhealth miniobsidian
@@ -37,8 +38,17 @@ Lua:
   require("miniobsidian").setup({
     vaults_parent = "~/Documents/Obsidian",
     default_vault = "MyVault",
+    cli = {
+      enabled = "auto",
+      command = "obs-cli",
+      timeout_ms = 3000,
+    },
   })
 <
+
+The CLI adapter is optional. "auto" asynchronously probes capabilities when the
+executable exists. Missing, timed-out, invalid, or incompatible CLI responses
+never disable local note features.
 
 ==============================================================================
 COMMANDS                                                     *miniobsidian-commands*
@@ -76,6 +86,9 @@ All commands are registered under the "Obsidian" prefix.
 
 :ObsidianSetup                                               *:ObsidianSetup*
     Initialize with default config (mostly for testing).
+
+:ObsidianCLIRefresh                                    *:ObsidianCLIRefresh*
+    Refresh the optional obs-cli capability cache asynchronously.
 
 ==============================================================================
 EVENTS                                                         *miniobsidian-events*
