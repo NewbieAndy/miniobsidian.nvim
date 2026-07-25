@@ -319,6 +319,12 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 - `obs-cli` is optional. Auto mode only runs `capabilities --output json`
   asynchronously. A missing CLI, timeout, invalid JSON, or incompatible protocol never
   disables local plugin features. The adapter uses structured argv without shell interpolation.
+- `:ObsidianMove` works only when the `note.get` and `note.move` capabilities are
+  available. It reads the revision, previews a dry-run plan, and submits the exact
+  `revision + plan_hash` only after the user selects `Apply`. Unsaved buffers are rejected
+  before any CLI move begins.
+- `:ObsidianVaultAudit` opens a readonly `note.list` JSON snapshot as the safe entry
+  point for later audits or batch workflows; it never applies changes automatically.
 
 ---
 
@@ -337,6 +343,8 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianToday[!]` | none | Open/create today's note; `!` passes `switch_root=true` to `after_note_open` |
 | `:ObsidianResolveConflict` | none | Resolve the current note's external change: diff, keep buffer, or reload disk |
 | `:ObsidianCLIRefresh` | none | Refresh the optional obs-cli capability cache asynchronously |
+| `:ObsidianMove [target]` | optional | Preview a dry-run and safely move the current note after confirmation; requires `note.get` / `note.move` |
+| `:ObsidianVaultAudit` | none | Open a readonly Vault JSON snapshot; requires `note.list` |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
 ---
@@ -374,6 +382,10 @@ require("miniobsidian.image").paste_img(name?)         -- Paste clipboard image 
 require("miniobsidian.vault").pick_and_switch()        -- Open vault picker
 require("miniobsidian.vault").do_switch(entry)         -- Switch to a vault directly (entry = {name, path})
 require("miniobsidian.vault").list_vaults(parent)      -- List all valid vaults under a parent directory
+
+-- Optional CLI-powered capabilities
+require("miniobsidian.move").move_current(target?)     -- Dry-run, confirm, and transactionally move current note
+require("miniobsidian.move").audit()                   -- Open a readonly Vault JSON snapshot
 
 -- Core module
 require("miniobsidian").config                         -- Current config (includes runtime vault_path)

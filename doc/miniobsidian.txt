@@ -90,6 +90,15 @@ All commands are registered under the "Obsidian" prefix.
 :ObsidianCLIRefresh                                    *:ObsidianCLIRefresh*
     Refresh the optional obs-cli capability cache asynchronously.
 
+:ObsidianMove [target]                                      *:ObsidianMove*
+    Read the current revision, preview the obs-cli note.move dry-run, and apply
+    only after confirmation with the exact revision and plan hash. Requires
+    note.get and note.move capabilities. Unsaved buffers are rejected.
+
+:ObsidianVaultAudit                                    *:ObsidianVaultAudit*
+    Open a readonly JSON snapshot from obs-cli note.list. This command never
+    applies audit or batch changes. Requires the note.list capability.
+
 ==============================================================================
 EVENTS                                                         *miniobsidian-events*
 

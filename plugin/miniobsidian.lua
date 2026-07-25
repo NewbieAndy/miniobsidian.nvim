@@ -9,7 +9,7 @@
 --           miniobsidian.image、miniobsidian.daily（均为延迟 require）
 -- 对外 API：用户命令 ObsidianNew / ObsidianSwitch / ObsidianSearch /
 --           ObsidianTemplate / ObsidianPasteImg / ObsidianToday /
---           ObsidianCLIRefresh / ObsidianSetup
+--           ObsidianCLIRefresh / ObsidianMove / ObsidianVaultAudit / ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
 -- ============================================================
@@ -141,6 +141,25 @@ vim.api.nvim_create_user_command("ObsidianCLIRefresh", function()
     require("miniobsidian").notify(("obs-cli status: %s"):format(state.status))
   end)
 end, { desc = "刷新可选 obs-cli capability 缓存" })
+
+--- :ObsidianMove [target]
+-- 使用 obs-cli 的事务化 note.move：先 dry-run 并预览计划，确认后携带 revision
+-- 与 plan_hash 执行 apply。CLI 不可用或 capability 不满足时返回稳定错误。
+vim.api.nvim_create_user_command("ObsidianMove", function(opts)
+  require("miniobsidian.move").move_current(opts.args ~= "" and opts.args or nil)
+end, {
+  nargs = "?",
+  complete = "file",
+  desc = "预览并安全移动当前笔记（需要 obs-cli note.get/note.move）",
+})
+
+--- :ObsidianVaultAudit
+-- 通过只读 note.list 获取当前 Vault 快照；该入口不会自动修改任何文件。
+vim.api.nvim_create_user_command("ObsidianVaultAudit", function()
+  require("miniobsidian.move").audit()
+end, {
+  desc = "打开只读 Vault 审计结果（需要 obs-cli note.list）",
+})
 
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
 -- 监听 miniobsidian.init.setup() 触发的自定义事件 "MiniObsidianSetup"，

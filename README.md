@@ -314,6 +314,11 @@ require("miniobsidian").setup({
 - `obs-cli` 是可选高级能力。`auto` 模式只异步执行
   `capabilities --output json`；CLI 缺失、超时、非法 JSON 或协议不兼容都不会影响插件
   本地功能。Adapter 只使用结构化 argv，不经过 shell 插值。
+- `:ObsidianMove` 仅在 `note.get` 与 `note.move` capability 可用时工作。它会先读取
+  revision、执行 dry-run 并展示完整计划，只有用户选择 `Apply` 后才携带
+  `revision + plan_hash` 提交；未保存 buffer 会在任何 CLI 移动前被拒绝。
+- `:ObsidianVaultAudit` 通过只读 `note.list` 打开当前 Vault 的 JSON 快照，作为后续
+  审计/批量操作的只读入口，不会自动 apply。
 
 ---
 
@@ -332,6 +337,8 @@ require("miniobsidian").setup({
 | `:ObsidianToday[!]` | 无 | 打开/创建今日笔记；`!` 向 `after_note_open` 传递 `switch_root=true` |
 | `:ObsidianResolveConflict` | 无 | 处理当前笔记的外部修改：查看 diff、保留 buffer 或重新加载磁盘 |
 | `:ObsidianCLIRefresh` | 无 | 异步刷新可选 obs-cli capability 缓存 |
+| `:ObsidianMove [目标路径]` | 可选 | dry-run 预览并确认后安全移动当前笔记；需要 `note.get` / `note.move` |
+| `:ObsidianVaultAudit` | 无 | 打开只读 Vault JSON 快照；需要 `note.list` |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
 ---
@@ -369,6 +376,10 @@ require("miniobsidian.image").paste_img(name?)         -- 粘贴剪贴板图片�
 require("miniobsidian.vault").pick_and_switch()        -- 弹出 vault 选择器
 require("miniobsidian.vault").do_switch(entry)         -- 直接切换到指定 vault（entry = {name, path}）
 require("miniobsidian.vault").list_vaults(parent)      -- 列出指定父目录下的所有有效 vault
+
+-- 可选 CLI 高级能力
+require("miniobsidian.move").move_current(target?)     -- dry-run、确认并事务化移动当前笔记
+require("miniobsidian.move").audit()                   -- 打开只读 Vault JSON 快照
 
 -- 核心模块
 require("miniobsidian").config                         -- 当前完整配置（含运行时 vault_path）
