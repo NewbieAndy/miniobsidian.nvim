@@ -243,6 +243,12 @@ require("miniobsidian").setup({
   -- 并尝试将 Moment.js 格式转换为 Lua os.date 格式
   daily_date_format = "%Y-%m-%d",
 
+  -- 外部修改策略："prompt"（默认）、"reload"（仅未修改 buffer 自动重载）或 "notify"
+  external_change_mode = "prompt",
+  external_check_interval_ms = 1000, -- FocusGained/BufEnter checktime 防抖
+  external_watch_debounce_ms = 100,  -- Vault 文件系统事件防抖
+  watch_external_changes = true,     -- 外部创建/删除/重命名时失效笔记缓存
+
   -- Checkbox 循环状态序列（按配置顺序切换，可使用上方状态参考表中的任意字符）
   -- 极简双态：{ " ", "x" }
   -- 扩展版本：{ " ", "/", "x", "-", ">", "!", "?" }
@@ -300,6 +306,7 @@ require("miniobsidian").setup({
 | `:ObsidianNewTemplate [名称]` | 可选 | 新建模板文件；省略则弹出输入框 |
 | `:ObsidianPasteImg [文件名]` | 可选 | 粘贴剪贴板图片（macOS）；省略则弹出输入框 |
 | `:ObsidianToday` | 无 | 打开/创建今日每日笔记（`vault/dailies_folder/日期.md`） |
+| `:ObsidianResolveConflict` | 无 | 处理当前笔记的外部修改：查看 diff、保留 buffer 或重新加载磁盘 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
 ---
@@ -378,7 +385,16 @@ require("miniobsidian").invalidate_cache()             -- 主动清空笔记路�
 | `[[` | 弹出 vault 内所有笔记名，支持模糊匹配；**悬停候选时显示笔记前 10 行预览** |
 | `- [`、`* [`、`+ [` | 弹出当前 `checkbox_states` 配置的所有状态候选 |
 
-**缓存与性能：** 首次补全时扫描全量笔记并建立内存缓存；在 vault 内保存 Markdown 文件时自动刷新缓存；5 秒 TTL 保护，避免频繁磁盘 I/O。
+**缓存与性能：** 首次补全时扫描全量笔记并建立内存缓存；插件自身写入会立即精确失效，Vault 文件监听会对外部创建、删除和重命名做 100ms 防抖失效；5 秒 TTL 继续作为跨平台兜底。文件监听和 `checktime` 不执行全 Vault 内容扫描。
+
+### 外部修改与冲突
+
+插件在 `FocusGained` / `BufEnter` 上以最小间隔执行原生 `checktime`，并接管 Vault 内 Markdown buffer 的 `FileChangedShell` 流程：
+
+- 默认 `external_change_mode = "prompt"`：无论 buffer 是否修改，都先保留内存内容并提供 diff、保留、重新加载三个动作。
+- `reload`：仅未修改 buffer 自动重载；有未保存内容时仍强制进入冲突流程。
+- `notify`：保留 buffer 并通知，可用 `:ObsidianResolveConflict` 打开动作选择器。
+- 检测到冲突后，普通 `:write` 会被阻止，避免用陈旧 buffer 静默覆盖 Obsidian、同步工具或 Agent 写入的磁盘版本。
 
 ---
 

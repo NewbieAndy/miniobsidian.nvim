@@ -25,6 +25,10 @@ local M = {}
 ---@field templates_folder string 模板文件所在目录（相对当前活跃 vault）
 ---@field attachments_folder string 图片等附件目录（相对当前活跃 vault）
 ---@field daily_date_format string os.date 格式字符串，用于每日笔记文件名及 frontmatter 日期
+---@field external_change_mode "prompt"|"reload"|"notify" 未修改 buffer 的外部变更处理策略
+---@field external_check_interval_ms number checktime 最小间隔
+---@field external_watch_debounce_ms number 文件系统事件防抖间隔
+---@field watch_external_changes boolean 是否监听 Vault 目录变化以失效缓存
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
@@ -49,6 +53,10 @@ M.config = {
   templates_folder = "Templates",
   attachments_folder = "Assets",
   daily_date_format = "%Y-%m-%d",
+  external_change_mode = "prompt",
+  external_check_interval_ms = 1000,
+  external_watch_debounce_ms = 100,
+  watch_external_changes = true,
 
   --- Checkbox 循环切换状态列表（按顺序循环）。
   -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。

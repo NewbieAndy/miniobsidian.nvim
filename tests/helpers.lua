@@ -16,6 +16,10 @@ function M.configure(vault)
   core.config.daily_default_content = ""
   core.config.templates_folder = "Templates"
   core.config.daily_date_format = "%Y-%m-%d"
+  core.config.external_change_mode = "prompt"
+  core.config.external_check_interval_ms = 1000
+  core.config.external_watch_debounce_ms = 100
+  core.config.watch_external_changes = true
   core.invalidate_cache()
   return core
 end

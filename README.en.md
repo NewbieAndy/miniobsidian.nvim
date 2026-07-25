@@ -247,6 +247,12 @@ require("miniobsidian").setup({
   -- and attempts to convert Moment.js format to Lua os.date format.
   daily_date_format = "%Y-%m-%d",
 
+  -- External-change policy: "prompt" (default), "reload" (clean buffers only), or "notify".
+  external_change_mode = "prompt",
+  external_check_interval_ms = 1000, -- Debounce FocusGained/BufEnter checktime.
+  external_watch_debounce_ms = 100,  -- Debounce Vault filesystem events.
+  watch_external_changes = true,     -- Invalidate note cache on external create/delete/rename.
+
   -- Checkbox cycle states (toggle cycles through these in order).
   -- Minimal two-state: { " ", "x" }
   -- Extended:          { " ", "/", "x", "-", ">", "!", "?" }
@@ -304,6 +310,7 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianNewTemplate [name]` | optional | Create a new template file; prompts if omitted |
 | `:ObsidianPasteImg [name]` | optional | Paste clipboard image (macOS); prompts if omitted |
 | `:ObsidianToday` | none | Open or create today's daily note (`vault/dailies_folder/date.md`) |
+| `:ObsidianResolveConflict` | none | Resolve the current note's external change: diff, keep buffer, or reload disk |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
 ---
@@ -382,7 +389,16 @@ Only activates in Markdown files **inside your active vault** — no interferenc
 | `[[` | Shows all note names in the vault for fuzzy selection; **hovering an item previews the note's first 10 lines** |
 | `- [`, `* [`, `+ [` | Shows all states from your `checkbox_states` config as candidates |
 
-**Caching & performance:** A full vault scan runs on first completion and is stored in memory. The cache is invalidated automatically on `BufWritePost` for vault Markdown files, and also expires after 5 seconds as a safety net — so new and deleted notes stay up to date without noticeable I/O overhead.
+**Caching & performance:** A full vault scan runs on first completion. Plugin writes invalidate the cache immediately, while a debounced Vault watcher handles external creates, deletes, and renames. The 5-second TTL remains a cross-platform fallback. Neither the watcher nor `checktime` performs a full-Vault content scan.
+
+### External changes and conflicts
+
+The plugin runs throttled native `checktime` checks on `FocusGained` / `BufEnter` and controls `FileChangedShell` for Markdown buffers inside the Vault:
+
+- Default `external_change_mode = "prompt"` preserves the in-memory buffer and offers diff, keep, and reload actions.
+- `reload` automatically reloads clean buffers only; unsaved buffers still enter the conflict flow.
+- `notify` preserves the buffer and warns; run `:ObsidianResolveConflict` to reopen the actions.
+- Once a conflict is detected, normal `:write` is blocked so a stale buffer cannot silently overwrite changes from Obsidian, sync tools, or an Agent.
 
 ---
 

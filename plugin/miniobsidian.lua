@@ -129,6 +129,10 @@ vim.api.nvim_create_user_command("ObsidianSetup", function()
   require("miniobsidian").setup()
 end, { desc = "初始化 miniobsidian（使用默认配置）" })
 
+vim.api.nvim_create_user_command("ObsidianResolveConflict", function()
+  require("miniobsidian.external_changes").prompt(vim.api.nvim_get_current_buf(), true)
+end, { desc = "处理当前笔记的外部修改冲突" })
+
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
 -- 监听 miniobsidian.init.setup() 触发的自定义事件 "MiniObsidianSetup"，
 -- 在事件回调中注册需要 config 已就绪的 autocmd（此时 vault_path 已被展开）。
@@ -145,6 +149,7 @@ vim.api.nvim_create_autocmd("User", {
 
     -- 创建独立 augroup，clear = true 确保不重复注册（若 once = true 失效时的兜底）
     local augroup = vim.api.nvim_create_augroup("miniobsidian_buffers", { clear = true })
+    require("miniobsidian.external_changes").setup_autocmds(augroup)
 
     -- 主动触发补全：只在「进入」[[ 或 - [ 上下文的瞬间调用 blink.show()。
     -- 关键优化：不对上下文内的每个字符都调用 blink.show()。
