@@ -9,7 +9,8 @@
 --           miniobsidian.image、miniobsidian.daily（均为延迟 require）
 -- 对外 API：用户命令 ObsidianNew / ObsidianSwitch / ObsidianSearch /
 --           ObsidianTemplate / ObsidianPasteImg / ObsidianToday /
---           ObsidianCLIRefresh / ObsidianMove / ObsidianVaultAudit / ObsidianSetup
+--           ObsidianCLIRefresh / ObsidianMove / ObsidianVaultAudit /
+--           ObsidianAgentAnalyze / ObsidianAgentUpdate / ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
 -- ============================================================
@@ -159,6 +160,22 @@ vim.api.nvim_create_user_command("ObsidianVaultAudit", function()
   require("miniobsidian.move").audit()
 end, {
   desc = "打开只读 Vault 审计结果（需要 obs-cli note.list）",
+})
+
+vim.api.nvim_create_user_command("ObsidianAgentAnalyze", function(opts)
+  require("miniobsidian.handoff").handoff("analyze", opts.args, opts)
+end, {
+  nargs = "*",
+  range = true,
+  desc = "将当前笔记或选区交给 Agent 做只读分析",
+})
+
+vim.api.nvim_create_user_command("ObsidianAgentUpdate", function(opts)
+  require("miniobsidian.handoff").handoff("update", opts.args, opts)
+end, {
+  nargs = "*",
+  range = true,
+  desc = "将当前笔记或选区交给 Agent 做受限安全更新",
 })
 
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────

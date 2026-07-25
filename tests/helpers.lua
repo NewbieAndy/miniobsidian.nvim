@@ -27,6 +27,11 @@ function M.configure(vault)
     command = "obs-cli",
     timeout_ms = 3000,
   }
+  core.config.agent = {
+    handler = nil,
+    confirm_content = true,
+    large_selection_lines = 200,
+  }
   core.invalidate_cache()
   return core
 end

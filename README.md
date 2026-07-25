@@ -263,6 +263,15 @@ require("miniobsidian").setup({
     timeout_ms = 3000,
   },
 
+  -- 可选 Agent handoff bridge；插件不绑定具体 Agent 框架
+  agent = {
+    handler = function(payload)
+      MyAgent.submit(payload) -- 接收 miniobsidian.agent-handoff/v1
+    end,
+    confirm_content = true,      -- 内存内容发送前预览确认
+    large_selection_lines = 200, -- 大选区始终确认
+  },
+
   -- Checkbox 循环状态序列（按配置顺序切换，可使用上方状态参考表中的任意字符）
   -- 极简双态：{ " ", "x" }
   -- 扩展版本：{ " ", "/", "x", "-", ">", "!", "?" }
@@ -319,6 +328,12 @@ require("miniobsidian").setup({
   `revision + plan_hash` 提交；未保存 buffer 会在任何 CLI 移动前被拒绝。
 - `:ObsidianVaultAudit` 通过只读 `note.list` 打开当前 Vault 的 JSON 快照，作为后续
   审计/批量操作的只读入口，不会自动 apply。
+- Agent handoff 通过用户配置的 `agent.handler(payload)` 适配任意 Agent 框架，
+  不启动 shell。Payload 固定为 `miniobsidian.agent-handoff/v1`，只包含 Vault ID、
+  当前笔记相对路径/revision、显式意图和可选内存选区；默认禁止全 Vault 扫描。
+- `:ObsidianAgentAnalyze` 使用只读权限与 `obsidian-knowledge-synthesis` Skill；
+  dirty buffer 只允许经确认的内存只读分析。`:ObsidianAgentUpdate` 要求先保存
+  buffer，并只授权当前路径给 `obsidian-safe-note-update`。
 
 ---
 
@@ -339,6 +354,8 @@ require("miniobsidian").setup({
 | `:ObsidianCLIRefresh` | 无 | 异步刷新可选 obs-cli capability 缓存 |
 | `:ObsidianMove [目标路径]` | 可选 | dry-run 预览并确认后安全移动当前笔记；需要 `note.get` / `note.move` |
 | `:ObsidianVaultAudit` | 无 | 打开只读 Vault JSON 快照；需要 `note.list` |
+| `:[range]ObsidianAgentAnalyze [意图]` | 可选 | 将当前笔记/选区交给 Agent 做有界只读分析 |
+| `:[range]ObsidianAgentUpdate [意图]` | 可选 | 将当前笔记/选区交给 Agent 做当前路径内的安全更新 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
 ---
@@ -380,6 +397,8 @@ require("miniobsidian.vault").list_vaults(parent)      -- 列出指定父目录�
 -- 可选 CLI 高级能力
 require("miniobsidian.move").move_current(target?)     -- dry-run、确认并事务化移动当前笔记
 require("miniobsidian.move").audit()                   -- 打开只读 Vault JSON 快照
+require("miniobsidian.handoff").handoff(mode, intent?, command_opts?) -- 构造并分发 Agent handoff
+require("miniobsidian.handoff").last_request            -- 最近成功分发的 request payload
 
 -- 核心模块
 require("miniobsidian").config                         -- 当前完整配置（含运行时 vault_path）

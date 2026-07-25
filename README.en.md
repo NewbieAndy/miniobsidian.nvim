@@ -268,6 +268,15 @@ require("miniobsidian").setup({
     timeout_ms = 3000,
   },
 
+  -- Optional Agent handoff bridge; no Agent framework is required.
+  agent = {
+    handler = function(payload)
+      MyAgent.submit(payload) -- Receives miniobsidian.agent-handoff/v1.
+    end,
+    confirm_content = true,      -- Preview in-memory content before sending.
+    large_selection_lines = 200, -- Large selections always require confirmation.
+  },
+
   -- Checkbox cycle states (toggle cycles through these in order).
   -- Minimal two-state: { " ", "x" }
   -- Extended:          { " ", "/", "x", "-", ">", "!", "?" }
@@ -325,6 +334,14 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
   before any CLI move begins.
 - `:ObsidianVaultAudit` opens a readonly `note.list` JSON snapshot as the safe entry
   point for later audits or batch workflows; it never applies changes automatically.
+- Agent handoff uses a user-provided `agent.handler(payload)` bridge and never starts a
+  shell. Its `miniobsidian.agent-handoff/v1` payload contains only the Vault ID,
+  current Vault-relative path/revision, explicit intent, and optional in-memory
+  selection; whole-Vault scanning is denied by default.
+- `:ObsidianAgentAnalyze` selects readonly permissions and
+  `obsidian-knowledge-synthesis`. Dirty buffers are limited to confirmed readonly
+  memory context. `:ObsidianAgentUpdate` requires a saved buffer and grants
+  `obsidian-safe-note-update` write permission only for the current path.
 
 ---
 
@@ -345,6 +362,8 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianCLIRefresh` | none | Refresh the optional obs-cli capability cache asynchronously |
 | `:ObsidianMove [target]` | optional | Preview a dry-run and safely move the current note after confirmation; requires `note.get` / `note.move` |
 | `:ObsidianVaultAudit` | none | Open a readonly Vault JSON snapshot; requires `note.list` |
+| `:[range]ObsidianAgentAnalyze [intent]` | optional | Hand off the current note/selection for bounded readonly Agent analysis |
+| `:[range]ObsidianAgentUpdate [intent]` | optional | Hand off the current note/selection for a safe update limited to that path |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
 ---
@@ -386,6 +405,8 @@ require("miniobsidian.vault").list_vaults(parent)      -- List all valid vaults 
 -- Optional CLI-powered capabilities
 require("miniobsidian.move").move_current(target?)     -- Dry-run, confirm, and transactionally move current note
 require("miniobsidian.move").audit()                   -- Open a readonly Vault JSON snapshot
+require("miniobsidian.handoff").handoff(mode, intent?, command_opts?) -- Build and dispatch Agent handoff
+require("miniobsidian.handoff").last_request            -- Most recently dispatched request payload
 
 -- Core module
 require("miniobsidian").config                         -- Current config (includes runtime vault_path)

@@ -32,6 +32,7 @@ local M = {}
 ---@field change_cwd_on_switch boolean 切换 Vault 时是否设置当前 tab 的 cwd（默认 false）
 ---@field picker_scope "notes"|"vault" quick switch/search 的范围
 ---@field cli {enabled: boolean|"auto", command: string, timeout_ms: number} 可选 obs-cli adapter 配置
+---@field agent {handler: function|nil, confirm_content: boolean, large_selection_lines: number} Agent handoff 配置
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
@@ -67,6 +68,11 @@ local function new_default_config()
       enabled = "auto",
       command = "obs-cli",
       timeout_ms = 3000,
+    },
+    agent = {
+      handler = nil,
+      confirm_content = true,
+      large_selection_lines = 200,
     },
 
     --- Checkbox 循环切换状态列表（按顺序循环）。
@@ -139,6 +145,15 @@ function M.validate_config(config)
     )
     add(type(config.cli.command) == "string" and config.cli.command ~= "", "cli.command 必须是非空字符串")
     add(type(config.cli.timeout_ms) == "number" and config.cli.timeout_ms > 0, "cli.timeout_ms 必须是正数")
+  end
+  add(type(config.agent) == "table", "agent 必须是 table")
+  if type(config.agent) == "table" then
+    add(config.agent.handler == nil or type(config.agent.handler) == "function", "agent.handler 必须是函数或 nil")
+    add(type(config.agent.confirm_content) == "boolean", "agent.confirm_content 必须是 boolean")
+    add(
+      type(config.agent.large_selection_lines) == "number" and config.agent.large_selection_lines > 0,
+      "agent.large_selection_lines 必须是正数"
+    )
   end
   add(config.picker_scope == "notes" or config.picker_scope == "vault", "picker_scope 必须是 notes 或 vault")
   add(
