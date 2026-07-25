@@ -334,6 +334,11 @@ require("miniobsidian").setup({
 - `:ObsidianAgentAnalyze` 使用只读权限与 `obsidian-knowledge-synthesis` Skill；
   dirty buffer 只允许经确认的内存只读分析。`:ObsidianAgentUpdate` 要求先保存
   buffer，并只授权当前路径给 `obsidian-safe-note-update`。
+- Agent 完成后由集成层调用
+  `require("miniobsidian.agent_result").handle(result)`。Result 使用
+  `miniobsidian.agent-result/v1`：先显示 changed files/revision/摘要；多文件先选择，
+  clean buffer 显示 unified diff，dirty buffer 显示 base / Agent disk / local
+  三方视图，绝不自动选择版本。`PARTIAL_FAILURE` 等错误显示恢复清单。
 
 ---
 
@@ -356,6 +361,7 @@ require("miniobsidian").setup({
 | `:ObsidianVaultAudit` | 无 | 打开只读 Vault JSON 快照；需要 `note.list` |
 | `:[range]ObsidianAgentAnalyze [意图]` | 可选 | 将当前笔记/选区交给 Agent 做有界只读分析 |
 | `:[range]ObsidianAgentUpdate [意图]` | 可选 | 将当前笔记/选区交给 Agent 做当前路径内的安全更新 |
+| `:ObsidianAgentLastResult` | 无 | 重新打开最近一次 Agent result 的 changed files 与恢复摘要 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
 ---
@@ -399,6 +405,8 @@ require("miniobsidian.move").move_current(target?)     -- dry-run、确认并事
 require("miniobsidian.move").audit()                   -- 打开只读 Vault JSON 快照
 require("miniobsidian.handoff").handoff(mode, intent?, command_opts?) -- 构造并分发 Agent handoff
 require("miniobsidian.handoff").last_request            -- 最近成功分发的 request payload
+require("miniobsidian.agent_result").handle(result)     -- 处理 Agent result、diff 与冲突
+require("miniobsidian.agent_result").show_last()        -- 重新打开最近结果摘要
 
 -- 核心模块
 require("miniobsidian").config                         -- 当前完整配置（含运行时 vault_path）

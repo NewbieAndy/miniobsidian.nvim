@@ -183,6 +183,24 @@ function M.get_conflict(buf)
   return conflicts[buf]
 end
 
+---@param buf integer
+---@param reason? string
+---@param opts? {prompted?: boolean}
+---@return boolean
+function M.mark_conflict(buf, reason, opts)
+  if not is_markdown_buffer(buf) then
+    return false
+  end
+  opts = opts or {}
+  conflicts[buf] = {
+    reason = reason or "agent",
+    modified = vim.api.nvim_get_option_value("modified", { buf = buf }),
+    prompted = opts.prompted == true,
+  }
+  require("miniobsidian").invalidate_cache()
+  return true
+end
+
 ---Run a throttled native checktime over loaded buffers.
 ---@param force? boolean
 function M.checktime(force)

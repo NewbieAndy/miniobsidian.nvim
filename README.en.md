@@ -342,6 +342,11 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
   `obsidian-knowledge-synthesis`. Dirty buffers are limited to confirmed readonly
   memory context. `:ObsidianAgentUpdate` requires a saved buffer and grants
   `obsidian-safe-note-update` write permission only for the current path.
+- When the Agent finishes, the integration calls
+  `require("miniobsidian.agent_result").handle(result)` with a
+  `miniobsidian.agent-result/v1` result. It shows changed files, revisions, and
+  recovery steps; clean buffers get a unified diff, while dirty buffers get explicit
+  base / Agent disk / local views. No conflict version is selected automatically.
 
 ---
 
@@ -364,6 +369,7 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianVaultAudit` | none | Open a readonly Vault JSON snapshot; requires `note.list` |
 | `:[range]ObsidianAgentAnalyze [intent]` | optional | Hand off the current note/selection for bounded readonly Agent analysis |
 | `:[range]ObsidianAgentUpdate [intent]` | optional | Hand off the current note/selection for a safe update limited to that path |
+| `:ObsidianAgentLastResult` | none | Reopen the latest Agent result changed-files and recovery summary |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
 ---
@@ -407,6 +413,8 @@ require("miniobsidian.move").move_current(target?)     -- Dry-run, confirm, and 
 require("miniobsidian.move").audit()                   -- Open a readonly Vault JSON snapshot
 require("miniobsidian.handoff").handoff(mode, intent?, command_opts?) -- Build and dispatch Agent handoff
 require("miniobsidian.handoff").last_request            -- Most recently dispatched request payload
+require("miniobsidian.agent_result").handle(result)     -- Handle Agent result, diffs, and conflicts
+require("miniobsidian.agent_result").show_last()        -- Reopen the latest result summary
 
 -- Core module
 require("miniobsidian").config                         -- Current config (includes runtime vault_path)

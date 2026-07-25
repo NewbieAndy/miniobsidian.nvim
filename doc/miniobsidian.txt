@@ -114,6 +114,12 @@ All commands are registered under the "Obsidian" prefix.
     Send a handoff limited to updating the current note with
     obsidian-safe-note-update. The buffer must be saved first.
 
+:ObsidianAgentLastResult                         *:ObsidianAgentLastResult*
+    Reopen the latest miniobsidian.agent-result/v1 summary. Agent integrations
+    deliver results through require("miniobsidian.agent_result").handle(result).
+    Dirty buffers use explicit base / Agent disk / local views and are never
+    reloaded automatically.
+
 ==============================================================================
 EVENTS                                                         *miniobsidian-events*
 

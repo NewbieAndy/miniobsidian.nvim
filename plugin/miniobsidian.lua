@@ -10,7 +10,8 @@
 -- 对外 API：用户命令 ObsidianNew / ObsidianSwitch / ObsidianSearch /
 --           ObsidianTemplate / ObsidianPasteImg / ObsidianToday /
 --           ObsidianCLIRefresh / ObsidianMove / ObsidianVaultAudit /
---           ObsidianAgentAnalyze / ObsidianAgentUpdate / ObsidianSetup
+--           ObsidianAgentAnalyze / ObsidianAgentUpdate / ObsidianAgentLastResult /
+--           ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
 -- ============================================================
@@ -176,6 +177,12 @@ end, {
   nargs = "*",
   range = true,
   desc = "将当前笔记或选区交给 Agent 做受限安全更新",
+})
+
+vim.api.nvim_create_user_command("ObsidianAgentLastResult", function()
+  require("miniobsidian.agent_result").show_last()
+end, {
+  desc = "重新打开最近一次 Agent result 摘要",
 })
 
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
