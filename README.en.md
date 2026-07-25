@@ -55,7 +55,7 @@ Shared contract status: `target_contract = vault-contract/v1`, `implemented_cont
 | ✅ **Checkbox Autocomplete** | Type `- [`, `* [`, or `+ [` to get all states from your `checkbox_states` config as candidates |
 | 🖼️ **Image Paste** | Paste clipboard images directly into notes (macOS only, built-in JXA script, no extra tools needed); handles both screenshots and files copied from Finder; auto-detects format (PNG / JPG / GIF / WEBP / HEIC / HEIF / TIFF / BMP / SVG); input prompt pre-fills a timestamp filename; inserts a **relative path** link that stays valid even when the vault is moved |
 | 📄 **Template System** | Pick from `Templates/` (subdirectory organization supported) and insert with variable substitution; 8 built-in variables (see table below); `new_template()` creates a new template pre-filled with a skeleton |
-| 📅 **Daily Note** | One keystroke opens or creates today's note; filename and frontmatter both use `daily_date_format`; auto-writes frontmatter with a `[daily]` tag |
+| 📅 **Daily Note** | Opens or creates today's note while syncing Obsidian Daily Notes folder, format, and template settings; creates an empty file when no template is configured and never overwrites an existing note |
 
 ---
 
@@ -87,7 +87,7 @@ The following states have built-in descriptions shown in autocomplete candidates
 | `{{tomorrow}}` | Tomorrow's date | `2024-01-16` |
 | `{{date:FORMAT}}` | Custom-formatted date | `{{date:YYYY/MM/DD}}` → `2024/01/15` |
 
-> All variables are **case-insensitive** — `{{Date}}`, `{{DATE}}`, and `{{date}}` all work.
+> All variables are **case-insensitive** — `{{Date}}`, `{{DATE}}`, and `{{date}}` all work. Unknown variables are preserved with a warning; yesterday and tomorrow use local calendar arithmetic across DST boundaries.
 
 `{{date:FORMAT}}` supports these tokens (Obsidian-compatible):
 
@@ -216,7 +216,7 @@ require("miniobsidian").setup({
 
   -- After determining the active vault, automatically sync settings from that vault's
   -- .obsidian/*.json files into the plugin config.
-  -- Default true; synced fields include notes_subdir, dailies_folder, daily_date_format.
+  -- Default true; syncs notes_subdir plus the Daily Notes folder, format, and template.
   -- User-supplied values always take precedence over auto-synced values.
   sync_obsidian_config = true,
 
@@ -227,7 +227,13 @@ require("miniobsidian").setup({
 
   -- Subdirectory for daily notes
   -- When sync_obsidian_config is true, reads folder from .obsidian/daily-notes.json.
-  dailies_folder = "Dailies",
+  dailies_folder = "",
+
+  -- Vault-relative Note ID for the Daily Note template; synced from daily-notes.json by default.
+  daily_template = "",
+
+  -- Initial content used when no Daily Note template is configured; empty by default.
+  daily_default_content = "",
 
   -- Subdirectory for templates (:ObsidianTemplate reads .md files here; subdirectories supported)
   templates_folder = "Templates",
@@ -273,6 +279,7 @@ When `sync_obsidian_config = true` (default), after determining the active vault
 | `.obsidian/app.json` | `notes_subdir` | Reads `newFileFolderPath` (when `newFileLocation` is `folder`) |
 | `.obsidian/daily-notes.json` | `dailies_folder` | Reads `folder` |
 | `.obsidian/daily-notes.json` | `daily_date_format` | Reads `format` and attempts to convert Moment.js format to Lua `os.date` format |
+| `.obsidian/daily-notes.json` | `daily_template` | Reads `template` and resolves it as a Vault-relative Note ID |
 
 **Configuration priority (highest to lowest):**
 

@@ -7,6 +7,7 @@
 -- 对外 API：M.new_template()、M.insert()
 -- ============================================================
 local M = {}
+local datetime = require("miniobsidian.datetime")
 local path_policy = require("miniobsidian.path")
 
 -- ──────────────────────────────────────────────
@@ -30,52 +31,7 @@ local path_policy = require("miniobsidian.path")
 ---@param content string 模板原始文本
 ---@param title string   当前文件标题（用于替换 {{title}} / {{filename}}）
 ---@return string        替换完占位变量后的文本
-local function substitute(content, title)
-  local cfg = require("miniobsidian").config
-  local now = os.time()
-
-  -- 使用用户配置的日期格式（默认 "%Y-%m-%d"）
-  local date_str = os.date(cfg.daily_date_format, now)
-  local time_str = os.date("%H:%M", now)
-  -- 昨天/明天：±86400 秒（忽略夏令时边界，笔记场景可接受）
-  local yest_str = os.date(cfg.daily_date_format, now - 86400)
-  local tmrw_str = os.date(cfg.daily_date_format, now + 86400)
-
-  -- 处理 {{date:FORMAT}} 内联自定义格式（优先于普通 {{date}}）
-  -- 支持 Obsidian 风格格式：YYYY → %Y，MM → %m，DD → %d，HH → %H，mm → %M，ss → %S
-  -- 注意：mm 必须在 ss 之前处理，互不干扰；YYYY/MM 等长格式先处理，防止 DD 吞掉 D
-  content = content:gsub("{{date:([^}]+)}}", function(fmt)
-    local lua_fmt =
-      fmt:gsub("YYYY", "%%Y"):gsub("MM", "%%m"):gsub("DD", "%%d"):gsub("HH", "%%H"):gsub("mm", "%%M"):gsub("ss", "%%S") -- 秒，必须在 mm→%M 之后添加，避免影响 mm 匹配
-    return os.date(lua_fmt, now)
-  end)
-
-  -- 替换规则表：{ pattern, replacement_value }
-  local replacements = {
-    { "{{[Dd]ate}}", date_str }, -- {{date}} / {{Date}}
-    { "{{DATE}}", date_str }, -- {{DATE}}
-    { "{{[Tt]ime}}", time_str }, -- {{time}} / {{Time}}
-    { "{{TIME}}", time_str }, -- {{TIME}}
-    { "{{[Tt]itle}}", title }, -- {{title}} / {{Title}}
-    { "{{TITLE}}", title }, -- {{TITLE}}
-    { "{{[Ff]ilename}}", title }, -- {{filename}} / {{Filename}}（= title）
-    { "{{FILENAME}}", title }, -- {{FILENAME}}
-    { "{{[Yy]esterday}}", yest_str }, -- {{yesterday}} / {{Yesterday}}
-    { "{{YESTERDAY}}", yest_str }, -- {{YESTERDAY}}
-    { "{{[Tt]omorrow}}", tmrw_str }, -- {{tomorrow}} / {{Tomorrow}}
-    { "{{TOMORROW}}", tmrw_str }, -- {{TOMORROW}}
-  }
-
-  for _, pair in ipairs(replacements) do
-    local replacement = pair[2]
-    -- 使用闭包返回替换字符串，规避 gsub 对 % 的特殊解释
-    content = content:gsub(pair[1], function()
-      return replacement
-    end)
-  end
-
-  return content
-end
+M.render = datetime.render
 
 -- ──────────────────────────────────────────────
 -- 公开 API
@@ -189,19 +145,19 @@ function M.insert()
     return
   end
 
-  -- 构建显示名称列表和名称→路径的映射表
+  -- 始终使用模板目录相对路径，避免同 basename 模板静默覆盖。
   local names = {}
   local name_to_path = {}
-  for _, path in ipairs(files) do
-    local safe = path_policy.resolve(cfg.vault_path, path, { allow_absolute = true })
+  for _, file_path in ipairs(files) do
+    local safe = path_policy.resolve(cfg.vault_path, file_path, { allow_absolute = true })
     if safe then
-      -- ":t:r" modifier：:t 取文件名部分，:r 去掉扩展名
-      -- 示例："/vault/Templates/daily.md" → "daily"
-      local name = vim.fn.fnamemodify(path, ":t:r")
+      local relative = path_policy.relative(templates_dir, safe.path)
+      local name = relative and relative:gsub("%.md$", "") or safe.logical:gsub("%.md$", "")
       table.insert(names, name)
       name_to_path[name] = safe.path
     end
   end
+  table.sort(names)
 
   -- 获取当前 buffer 文件名（不含路径和扩展名）作为 {{title}} 的替换值
   -- "%:t:r" 等价于 fnamemodify 的 ":t:r"
@@ -255,7 +211,17 @@ function M.insert()
     end
 
     -- 执行占位变量替换
-    local content = substitute(lines, title)
+    local content, warnings, render_err = M.render(lines, {
+      title = title,
+      date_format = cfg.daily_date_format,
+    })
+    if not content then
+      vim.notify("[miniobsidian] 模板渲染失败: " .. tostring(render_err), vim.log.levels.ERROR)
+      return
+    end
+    for _, warning in ipairs(warnings) do
+      vim.notify("[miniobsidian] " .. warning, vim.log.levels.WARN)
+    end
 
     -- vim.schedule 的必要性：
     --   select_fn（无论是 snacks 还是 vim.ui.select）的回调可能在 Neovim

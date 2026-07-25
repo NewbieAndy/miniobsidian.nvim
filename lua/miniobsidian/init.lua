@@ -20,6 +20,8 @@ local M = {}
 ---@field sync_obsidian_config boolean 确定活跃 vault 后，是否自动同步该 vault 内 .obsidian/*.json 配置到插件（默认 true）
 ---@field notes_subdir string   新建笔记存放的子目录（相对当前活跃 vault）
 ---@field dailies_folder string 每日笔记目录（相对当前活跃 vault）
+---@field daily_template string Daily Note 模板的 Vault 相对 Note ID
+---@field daily_default_content string 未配置模板时写入的新 Daily Note 内容（默认空）
 ---@field templates_folder string 模板文件所在目录（相对当前活跃 vault）
 ---@field attachments_folder string 图片等附件目录（相对当前活跃 vault）
 ---@field daily_date_format string os.date 格式字符串，用于每日笔记文件名及 frontmatter 日期
@@ -41,7 +43,9 @@ M.config = {
   sync_obsidian_config = true, -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
   vault_path = "", -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
   notes_subdir = "Notes",
-  dailies_folder = "Dailies",
+  dailies_folder = "",
+  daily_template = "",
+  daily_default_content = "",
   templates_folder = "Templates",
   attachments_folder = "Assets",
   daily_date_format = "%Y-%m-%d",

@@ -12,6 +12,8 @@ function M.configure(vault)
   core.config.vault_path = vault
   core.config.notes_subdir = "Notes"
   core.config.dailies_folder = "Dailies"
+  core.config.daily_template = ""
+  core.config.daily_default_content = ""
   core.config.templates_folder = "Templates"
   core.config.daily_date_format = "%Y-%m-%d"
   core.invalidate_cache()

@@ -147,9 +147,13 @@ end
 --   • .obsidian/daily-notes.json → dailies_folder、daily_date_format
 -- 用户手动配置的值优先级高于自动同步；调用方负责过滤。
 ---@param vault_path string vault 的绝对路径
----@return {notes_subdir?: string, dailies_folder?: string, daily_date_format?: string} 覆盖值表
+---@return {notes_subdir?: string, dailies_folder?: string, daily_date_format?: string, daily_template?: string} 覆盖值表
 function M.read_vault_config(vault_path)
-  local overrides = {}
+  local overrides = {
+    dailies_folder = "",
+    daily_date_format = "%Y-%m-%d",
+    daily_template = "",
+  }
 
   -- 读取 app.json：新笔记默认存放位置
   local app_config_path = vault_path .. "/.obsidian/app.json"
@@ -169,8 +173,11 @@ function M.read_vault_config(vault_path)
   if vim.fn.filereadable(daily_config_path) == 1 then
     local ok, daily_config = M._read_json_file(daily_config_path)
     if ok and type(daily_config) == "table" then
-      if daily_config.folder and daily_config.folder ~= "" then
+      if type(daily_config.folder) == "string" then
         overrides.dailies_folder = daily_config.folder
+      end
+      if type(daily_config.template) == "string" then
+        overrides.daily_template = daily_config.template
       end
       if daily_config.format and daily_config.format ~= "" then
         local lua_fmt = M.moment_to_lua_date(daily_config.format)
@@ -223,47 +230,7 @@ end
 ---@param moment_fmt string Moment.js 格式字符串
 ---@return string|nil lua_fmt 转换后的 Lua 格式字符串；若输入无效返回 nil
 function M.moment_to_lua_date(moment_fmt)
-  if not moment_fmt or moment_fmt == "" then
-    return nil
-  end
-
-  -- 顺序很重要：必须先替换长标记，再替换短标记，否则会发生冲突
-  -- 例如 MM 必须在 M 之前，DD 必须在 D 之前，YYYY 必须在 YY 之前
-  local replacements = {
-    { "YYYY", "%Y" },
-    { "YY", "%y" },
-    { "MMMM", "%B" },
-    { "MMM", "%b" },
-    { "MM", "%m" },
-    { "DD", "%d" },
-    { "dddd", "%A" },
-    { "ddd", "%a" },
-    { "HH", "%H" },
-    { "hh", "%I" },
-    { "mm", "%M" },
-    { "ss", "%S" },
-    { "A", "%p" },
-    { "a", "%p" },
-  }
-
-  -- 第一遍：将所有 Moment 标记替换为唯一占位符
-  local result = moment_fmt
-  local placeholders = {}
-  for i, r in ipairs(replacements) do
-    local placeholder = "\x00" .. i .. "\x00"
-    placeholders[i] = placeholder
-    result = result:gsub(r[1], placeholder)
-  end
-
-  -- 第二遍：将占位符替换为 Lua 格式字符串
-  for i, r in ipairs(replacements) do
-    result = result:gsub(placeholders[i], r[2])
-  end
-
-  -- 清理可能残留的占位符（理论上不应发生，防御性处理）
-  result = result:gsub("\x00%d+\x00", "")
-
-  return result
+  return require("miniobsidian.datetime").moment_to_lua(moment_fmt)
 end
 
 return M

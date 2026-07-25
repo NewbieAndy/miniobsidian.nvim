@@ -55,7 +55,7 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 | ✅ **Checkbox 自动补全** | 输入 `- [`、`* [`、`+ [` 时，blink.cmp 弹出当前 `checkbox_states` 中配置的所有状态候选 |
 | 🖼️ **图片粘贴** | 粘贴剪贴板图片到笔记（macOS 专用，内置 JXA 脚本，无需额外工具）；支持截图及 Finder 复制的文件；自动识别格式（PNG / JPG / GIF / WEBP / HEIC / HEIF / TIFF / BMP / SVG）；输入框预填时间戳默认文件名；插入**相对路径**图片链接，vault 迁移后依然有效 |
 | 📄 **模板系统** | 从 `Templates/` 目录（支持子目录层级）选择并插入模板；支持 8 种内置变量（见下表）；`new_template()` 快速创建新模板（自动写入含变量示例的骨架） |
-| 📅 **每日笔记** | 一键打开/创建今日笔记；文件名和 frontmatter 均使用 `daily_date_format`；自动写入带 `[daily]` 标签的 frontmatter |
+| 📅 **每日笔记** | 一键打开/创建今日笔记；同步 Obsidian Daily Notes 的目录、格式与模板；无模板时默认创建空文件，已有笔记只打开不覆盖 |
 
 ---
 
@@ -87,7 +87,7 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 | `{{tomorrow}}` | 明天日期 | `2024-01-16` |
 | `{{date:FORMAT}}` | 自定义格式日期 | `{{date:YYYY/MM/DD}}` → `2024/01/15` |
 
-> 所有变量均**大小写不敏感**（`{{Date}}`、`{{DATE}}`、`{{date}}` 均有效）。
+> 所有变量均**大小写不敏感**（`{{Date}}`、`{{DATE}}`、`{{date}}` 均有效）。未知变量保留原文并发出 warning；昨天/明天按本地日历日期计算，可安全跨越夏令时边界。
 
 `{{date:FORMAT}}` 支持以下格式令牌（兼容 Obsidian 风格）：
 
@@ -212,7 +212,7 @@ require("miniobsidian").setup({
   auto_discover = true,
 
   -- 确定活跃 vault 后，是否自动同步该 vault 内 .obsidian/*.json 配置到插件
-  -- 默认 true；同步的字段包括 notes_subdir、dailies_folder、daily_date_format
+  -- 默认 true；同步 notes_subdir 以及 Daily Notes 的目录、格式和模板
   -- 用户手动配置的值优先级始终高于自动同步的值
   sync_obsidian_config = true,
 
@@ -223,7 +223,13 @@ require("miniobsidian").setup({
 
   -- 每日笔记目录
   -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/daily-notes.json 的 folder
-  dailies_folder = "Dailies",
+  dailies_folder = "",
+
+  -- Daily Note 模板的 Vault 相对 Note ID；默认从 daily-notes.json 同步
+  daily_template = "",
+
+  -- 未配置模板时的新文件初始内容；默认空字符串
+  daily_default_content = "",
 
   -- 模板目录（:ObsidianTemplate 从此处读取 .md 文件，支持子目录）
   templates_folder = "Templates",
@@ -269,6 +275,7 @@ require("miniobsidian").setup({
 | `.obsidian/app.json` | `notes_subdir` | 读取 `newFileFolderPath`（当 `newFileLocation` 为 `folder` 时） |
 | `.obsidian/daily-notes.json` | `dailies_folder` | 读取 `folder` |
 | `.obsidian/daily-notes.json` | `daily_date_format` | 读取 `format` 并尝试将 Moment.js 格式转换为 Lua `os.date` 格式 |
+| `.obsidian/daily-notes.json` | `daily_template` | 读取 `template`，按 Vault 相对 Note ID 安全解析 |
 
 **配置优先级（从高到低）：**
 
