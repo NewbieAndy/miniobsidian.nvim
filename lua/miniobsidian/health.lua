@@ -29,6 +29,52 @@ local function uname()
   return uv.os_uname()
 end
 
+---@param core table
+---@return {level: "ok"|"info"|"warn"|"error", message: string}[]
+function M.vault_status(core)
+  local result = {}
+  local parent = core.config.vaults_parent
+  local active = core.config.vault_path
+
+  if not parent or parent == "" then
+    if core.config.auto_discover == false then
+      return { { level = "error", message = "vaults_parent 为空且 auto_discover 已关闭" } }
+    end
+    result[#result + 1] = { level = "ok", message = "Vault 来源: Obsidian 自动发现" }
+    if active and active ~= "" and vim.fn.isdirectory(active) == 1 then
+      result[#result + 1] = { level = "ok", message = "active vault_path: " .. active }
+    else
+      result[#result + 1] = {
+        level = "error",
+        message = "自动发现未得到有效的 active vault_path；请先在 Obsidian 中打开 Vault",
+      }
+    end
+    return result
+  end
+
+  parent = vim.fn.expand(parent)
+  if vim.fn.isdirectory(parent) ~= 1 then
+    return { { level = "error", message = "vaults_parent 目录不存在: " .. parent } }
+  end
+  result[#result + 1] = { level = "ok", message = "vaults_parent: " .. parent }
+
+  local vault = require("miniobsidian.vault")
+  vault.refresh_vaults()
+  local vaults = vault.list_vaults(parent)
+  if #vaults == 0 then
+    result[#result + 1] = { level = "error", message = "未找到含 .obsidian/ 的有效 Vault" }
+    return result
+  end
+  result[#result + 1] = { level = "ok", message = ("vaults found: %d"):format(#vaults) }
+
+  if active and active ~= "" and vim.fn.isdirectory(active) == 1 then
+    result[#result + 1] = { level = "ok", message = "active vault_path: " .. active }
+  else
+    result[#result + 1] = { level = "warn", message = "active vault_path 无效；setup() 可能未成功" }
+  end
+  return result
+end
+
 function M.check()
   local h = get_health()
   if not h then
@@ -37,7 +83,7 @@ function M.check()
 
   h.start("miniobsidian.nvim")
 
-  local required = { major = 0, minor = 11, patch = 2 }
+  local required = { major = 0, minor = 10, patch = 4 }
   local current = vim.version()
   if ver_ge(current, required) then
     h.ok(("Neovim %d.%d.%d"):format(current.major, current.minor, current.patch))
@@ -58,13 +104,13 @@ function M.check()
   if ok_snacks and snacks and snacks.picker then
     h.ok("snacks.nvim found")
   else
-    h.error("snacks.nvim not found (required)")
+    h.warn("snacks.nvim not found (quick switch/search disabled)")
   end
 
   if vim.fn.executable("rg") == 1 then
     h.ok("ripgrep (rg) found")
   else
-    h.error("ripgrep (rg) not found")
+    h.warn("ripgrep (rg) not found (full-text search disabled)")
   end
 
   local sys = uname()
@@ -92,38 +138,11 @@ function M.check()
     return
   end
 
-  local parent = core.config.vaults_parent
-  if not parent or parent == "" then
-    h.error("config.vaults_parent is empty (call setup({ vaults_parent = ... }))")
-    return
+  for _, message in ipairs(core.validate_config(core.config)) do
+    h.error("config: " .. message)
   end
-
-  parent = vim.fn.expand(parent)
-  if vim.fn.isdirectory(parent) == 1 then
-    h.ok(("vaults_parent: %s"):format(parent))
-  else
-    h.error(("vaults_parent directory does not exist: %s"):format(parent))
-    return
-  end
-
-  local vault = require("miniobsidian.vault")
-  vault.refresh_vaults()
-  local vaults = vault.list_vaults(parent)
-  if #vaults == 0 then
-    h.error("no valid vault found (a vault must contain .obsidian/)")
-    return
-  end
-
-  h.ok(("vaults found: %d"):format(#vaults))
-
-  if core.config.vault_path and core.config.vault_path ~= "" then
-    if vim.fn.isdirectory(core.config.vault_path) == 1 then
-      h.ok(("active vault_path: %s"):format(core.config.vault_path))
-    else
-      h.warn(("active vault_path does not exist: %s"):format(core.config.vault_path))
-    end
-  else
-    h.warn("active vault_path is empty (did setup() run successfully?)")
+  for _, item in ipairs(M.vault_status(core)) do
+    h[item.level](item.message)
   end
 end
 

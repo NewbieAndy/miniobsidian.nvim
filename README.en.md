@@ -4,7 +4,7 @@
 
 **A lightweight, fast Obsidian workflow plugin for Neovim**
 
-[![Neovim](https://img.shields.io/badge/Neovim-%3E%3D0.11.2-blueviolet?logo=neovim)](https://neovim.io)
+[![Neovim](https://img.shields.io/badge/Neovim-%3E%3D0.10.4-blueviolet?logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Made%20with-Lua-blue?logo=lua)](https://lua.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -44,11 +44,11 @@ Shared contract status: `target_contract = vault-contract/v1`, `implemented_cont
 
 | Feature | Description |
 |---------|-------------|
-| 🗂️ **Multi-Vault Support** | Auto-discovers vaults under `vaults_parent` by detecting `.obsidian/` subdirectories; when `vaults_parent` is empty and `auto_discover` is enabled, reads registered vaults from Obsidian's official `obsidian.json`; one-keystroke switching updates Neovim's cwd, compatible with neo-tree / snacks.nvim and other cwd-aware tools |
+| 🗂️ **Multi-Vault Support** | Discovers vaults by scanning or reading Obsidian's config; switching does not change cwd by default, with opt-in tab-local cwd and callbacks for file-tree integration |
 | 📝 **Quick Note Creation** | Auto-generates YAML frontmatter (`title`, `date`, `tags`); supports a custom filename generator; built-in slug logic handles CJK (Chinese/Japanese/Korean) characters; cursor lands at the first body line |
 | 📁 **Context-aware Creation** | When focused in a file explorer (snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw), creates the note in the directory under the cursor; if the cursor is on a file, creates it in that file's parent directory; target must be inside the current vault |
-| 🔀 **Quick Switch** | Fuzzy-find and jump between Markdown notes in `notes_subdir` via a `snacks.nvim` picker; hidden directories (`.obsidian/`, `.git/`) are automatically excluded |
-| 🔍 **Full-text Search** | Ripgrep-powered note search with a live preview pane; scoped to `notes_subdir` only for accurate, fast results |
+| 🔀 **Quick Switch** | Fuzzy-find Markdown notes with a `snacks.nvim` picker; defaults to `notes_subdir` and can cover the whole Vault |
+| 🔍 **Full-text Search** | Ripgrep-powered note search with live preview; defaults to `notes_subdir` and can cover the whole Vault |
 | 🔗 **Wiki Link Navigation** | `<CR>` follows `[[links]]`; supports `[[note]]`, `[[note\|alias]]`, `[[note#heading]]`, and `[[folder/note]]` formats; three-tier lookup (exact → case-insensitive → path-prefix strip); prompts to create if not found |
 | ✅ **Multi-state Checkbox** | Cycle through `[ ]` → `[/]` → `[x]` → `[-]` (fully configurable); plain list items auto-upgrade to checkboxes; `clear()` strips the checkbox back to a plain list item in one shot |
 | 🔗 **Wiki Link Autocomplete** | Type `[[` to fuzzy-complete any note name in the vault; duplicate-named notes shown as `parent/name` to disambiguate; **hovering an item shows a preview of the note's first 10 lines** |
@@ -103,7 +103,7 @@ The following states have built-in descriptions shown in autocomplete candidates
 
 | Dependency | Purpose | Install |
 |-----------|---------|---------|
-| **Neovim ≥ 0.11.2** | Required (uses `vim.system`, `vim.uv`, and other modern APIs) | — |
+| **Neovim ≥ 0.10.4** | Required; CI verifies both 0.10.4 and stable | — |
 | [snacks.nvim](https://github.com/folke/snacks.nvim) | Picker UI (quick switch, full-text search, template/vault selection) | lazy.nvim |
 | [blink.cmp](https://github.com/Saghen/blink.cmp) | Autocomplete (wiki links + checkboxes, **optional**) | lazy.nvim |
 | `ripgrep` | Full-text search backend | `brew install ripgrep` |
@@ -253,6 +253,12 @@ require("miniobsidian").setup({
   external_watch_debounce_ms = 100,  -- Debounce Vault filesystem events.
   watch_external_changes = true,     -- Invalidate note cache on external create/delete/rename.
 
+  -- Quick-switch/search scope: "notes" uses notes_subdir; "vault" uses the whole Vault.
+  picker_scope = "notes",
+
+  -- Vault switching leaves cwd unchanged by default; true uses tab-local :tcd only.
+  change_cwd_on_switch = false,
+
   -- Checkbox cycle states (toggle cycles through these in order).
   -- Minimal two-state: { " ", "x" }
   -- Extended:          { " ", "/", "x", "-", ">", "!", "?" }
@@ -295,13 +301,20 @@ When `sync_obsidian_config = true` (default), after determining the active vault
 
 When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is true the plugin automatically re-reads the new vault's settings and applies them.
 
+### V2 migration notes
+
+- Every `setup()` call rebuilds from defaults; values from a previous call no longer leak forward.
+- Vault switching no longer changes global cwd. Enable `change_cwd_on_switch = true` for tab-local cwd, or use `on_vault_switch` / `after_note_open`.
+- Daily Notes default to the Vault root and create an empty file without a template, matching Obsidian and `vault-contract/v1`.
+- Quick switch and search still default to `notes_subdir`; set `picker_scope = "vault"` for the whole Vault.
+
 ---
 
 ## Commands
 
 | Command | Args | Description |
 |---------|------|-------------|
-| `:ObsidianNew [title]` | optional | Quick-create a note to the default `notes_subdir`; prompts for title if omitted |
+| `:ObsidianNew[!] [title]` | optional | Create in `notes_subdir`; `!` passes `switch_root=true` to `after_note_open` |
 | `:ObsidianNewHere` | none | Create a note in the current file explorer's focused directory (snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw) |
 | `:ObsidianSwitch` | none | Open quick-switch picker |
 | `:ObsidianSearch [query]` | optional | Full-text search; prompts if omitted |
@@ -309,7 +322,7 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianTemplate` | none | Pick and insert a template |
 | `:ObsidianNewTemplate [name]` | optional | Create a new template file; prompts if omitted |
 | `:ObsidianPasteImg [name]` | optional | Paste clipboard image (macOS); prompts if omitted |
-| `:ObsidianToday` | none | Open or create today's daily note (`vault/dailies_folder/date.md`) |
+| `:ObsidianToday[!]` | none | Open/create today's note; `!` passes `switch_root=true` to `after_note_open` |
 | `:ObsidianResolveConflict` | none | Resolve the current note's external change: diff, keep buffer, or reload disk |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
@@ -433,7 +446,7 @@ The plugin fires Neovim `User` events so that other plugins or your config can r
 | Event | Fired when | Data |
 |-------|-----------|------|
 | `User MiniObsidianSetup` | `setup()` completes | none |
-| `User MiniObsidianVaultSwitch` | Vault is switched (cwd already updated) | `{ name: string, path: string }` |
+| `User MiniObsidianVaultSwitch` | Vault is switched (cwd unchanged by default) | `{ name: string, path: string }` |
 
 ```lua
 -- Example: refresh neo-tree root after switching vaults
@@ -455,7 +468,7 @@ vim.api.nvim_create_autocmd("User", {
 ```
 lua/miniobsidian/
 ├── init.lua          Core: setup(), vault detection, note path cache, in_vault()
-├── vault.lua         Multi-vault discovery, switching (updates cwd), picker UI
+├── vault.lua         Multi-vault discovery, switching without implicit cwd, picker UI
 ├── config_sync.lua   Obsidian official config reader (auto-discovery + vault setting sync)
 ├── note.lua          Note creation, quick switch, full-text search, follow_or_create
 ├── daily.lua         Daily note (:ObsidianToday)

@@ -20,4 +20,21 @@ describe("vault", function()
     assert.same({ "A", "B" }, { vaults[1].name, vaults[2].name })
     assert.equals(require("miniobsidian.path").realpath(parent .. "/A"), vaults[1].path)
   end)
+
+  it("does not change cwd by default and uses tab-local cwd when enabled", function()
+    local core = require("miniobsidian")
+    helpers.configure(parent .. "/A")
+    local original = vim.fn.getcwd()
+    local global_before = vim.fn.getcwd(-1, -1)
+
+    require("miniobsidian.vault").do_switch({ name = "B", path = parent .. "/B" })
+    assert.equals(original, vim.fn.getcwd())
+    assert.equals(global_before, vim.fn.getcwd(-1, -1))
+
+    core.config.change_cwd_on_switch = true
+    require("miniobsidian.vault").do_switch({ name = "A", path = parent .. "/A" })
+    assert.equals(require("miniobsidian.path").realpath(parent .. "/A"), vim.fn.getcwd())
+    assert.equals(global_before, vim.fn.getcwd(-1, -1))
+    vim.cmd("tcd " .. vim.fn.fnameescape(original))
+  end)
 end)

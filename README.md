@@ -4,7 +4,7 @@
 
 **轻量、快速的 Obsidian 工作流 Neovim 插件**
 
-[![Neovim](https://img.shields.io/badge/Neovim-%3E%3D0.11.2-blueviolet?logo=neovim)](https://neovim.io)
+[![Neovim](https://img.shields.io/badge/Neovim-%3E%3D0.10.4-blueviolet?logo=neovim)](https://neovim.io)
 [![Lua](https://img.shields.io/badge/Made%20with-Lua-blue?logo=lua)](https://lua.org)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -44,11 +44,11 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 
 | 功能 | 详细说明 |
 |------|---------|
-| 🗂️ **多 Vault 支持** | 自动扫描 `vaults_parent` 下含 `.obsidian/` 子目录的文件夹作为有效 vault；若 `vaults_parent` 留空且 `auto_discover` 开启，自动从 Obsidian 官方 `obsidian.json` 读取已注册 vault；一键切换，同步更新 Neovim 工作目录，兼容 neo-tree / snacks.nvim 等依赖 cwd 的工具 |
+| 🗂️ **多 Vault 支持** | 自动扫描或从 Obsidian 官方配置发现 vault；一键切换默认不修改 cwd，可显式启用安全的 tab-local cwd 或使用回调刷新文件树 |
 | 📝 **快速创建笔记** | 自动生成 YAML frontmatter（`title`、`date`、`tags`）；支持自定义文件名生成函数；内置 slug 规则兼容中文（CJK）字符；新建时光标自动定位到正文起始行 |
 | 📁 **目录感知创建** | 焦点在文件浏览器时（snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw），在光标所在目录下新建笔记；光标在文件上则在同级目录创建；目标必须在当前 vault 内 |
-| 🔀 **快速切换笔记** | 通过 `snacks.nvim` picker 在 `notes_subdir` 中模糊搜索并跳转 Markdown 笔记；自动过滤 `.obsidian/`、`.git/` 等隐藏目录 |
-| 🔍 **全文搜索** | 基于 ripgrep 的笔记全文搜索，附带实时预览；仅在 `notes_subdir` 范围内搜索，精准且快速 |
+| 🔀 **快速切换笔记** | 通过 `snacks.nvim` picker 模糊搜索并跳转 Markdown 笔记；默认 `notes_subdir`，可配置为全 Vault |
+| 🔍 **全文搜索** | 基于 ripgrep 的笔记全文搜索，附带实时预览；默认 `notes_subdir`，可配置为全 Vault |
 | 🔗 **Wiki 链接跳转** | `<CR>` 跳转 `[[链接]]`，支持 `[[note]]`、`[[note\|别名]]`、`[[note#章节]]`、`[[folder/note]]` 四种格式；三级查找（精确 → 忽略大小写 → 剥离路径前缀）；找不到时提示创建 |
 | ✅ **Checkbox 多状态循环** | 循环切换 `[ ]` → `[/]` → `[x]` → `[-]`（完全可自定义）；普通列表项自动升级为 checkbox；`clear()` 一键还原为普通列表项 |
 | 🔗 **Wiki 链接自动补全** | 输入 `[[` 时，blink.cmp 列出 vault 内所有笔记供模糊选择；同名笔记以 `父目录/名称` 区分；**悬停候选时显示笔记前 10 行预览** |
@@ -103,7 +103,7 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 
 | 依赖 | 用途 | 安装方式 |
 |------|------|---------|
-| **Neovim ≥ 0.11.2** | 必需（使用 `vim.system`、`vim.uv` 等现代 API） | — |
+| **Neovim ≥ 0.10.4** | 必需；CI 同时验证 0.10.4 与 stable | — |
 | [snacks.nvim](https://github.com/folke/snacks.nvim) | Picker UI（快速切换、全文搜索、模板/vault 选择） | lazy.nvim |
 | [blink.cmp](https://github.com/Saghen/blink.cmp) | 自动补全（wiki 链接 + checkbox，**可选**） | lazy.nvim |
 | `ripgrep` | 全文搜索后端 | `brew install ripgrep` |
@@ -249,6 +249,12 @@ require("miniobsidian").setup({
   external_watch_debounce_ms = 100,  -- Vault 文件系统事件防抖
   watch_external_changes = true,     -- 外部创建/删除/重命名时失效笔记缓存
 
+  -- 快速切换/全文搜索范围："notes" 使用 notes_subdir；"vault" 使用整个 Vault
+  picker_scope = "notes",
+
+  -- 切换 Vault 默认不修改 cwd；设为 true 时只执行 tab-local :tcd
+  change_cwd_on_switch = false,
+
   -- Checkbox 循环状态序列（按配置顺序切换，可使用上方状态参考表中的任意字符）
   -- 极简双态：{ " ", "x" }
   -- 扩展版本：{ " ", "/", "x", "-", ">", "!", "?" }
@@ -291,13 +297,20 @@ require("miniobsidian").setup({
 
 切换 vault 时（`:ObsidianSwitchVault`），若 `sync_obsidian_config` 为 true，插件会自动重新读取新 vault 的配置并应用。
 
+### V2 迁移说明
+
+- `setup()` 每次都从默认配置重新构造；重复调用不会继承上一次的自定义字段。
+- Vault 切换默认不再修改全局 cwd。需要 cwd 联动时启用 `change_cwd_on_switch = true`（tab-local），或使用 `on_vault_switch` / `after_note_open` 回调。
+- Daily Note 默认目录为 Vault 根、无模板时创建空文件，行为与 Obsidian 官方配置和 `vault-contract/v1` 一致。
+- 快速切换与搜索默认仍使用 `notes_subdir`；设置 `picker_scope = "vault"` 可覆盖整个 Vault。
+
 ---
 
 ## 用户命令
 
 | 命令 | 参数 | 说明 |
 |------|------|------|
-| `:ObsidianNew [标题]` | 可选 | 快捷新建笔记到默认 `notes_subdir`；省略标题则弹出输入框 |
+| `:ObsidianNew[!] [标题]` | 可选 | 新建到 `notes_subdir`；`!` 向 `after_note_open` 传递 `switch_root=true` |
 | `:ObsidianNewHere` | 无 | 在当前文件浏览器焦点目录下新建笔记（支持 snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw） |
 | `:ObsidianSwitch` | 无 | 打开笔记快速切换 picker |
 | `:ObsidianSearch [关键词]` | 可选 | 全文搜索；省略则弹出输入框 |
@@ -305,7 +318,7 @@ require("miniobsidian").setup({
 | `:ObsidianTemplate` | 无 | 选择并插入模板 |
 | `:ObsidianNewTemplate [名称]` | 可选 | 新建模板文件；省略则弹出输入框 |
 | `:ObsidianPasteImg [文件名]` | 可选 | 粘贴剪贴板图片（macOS）；省略则弹出输入框 |
-| `:ObsidianToday` | 无 | 打开/创建今日每日笔记（`vault/dailies_folder/日期.md`） |
+| `:ObsidianToday[!]` | 无 | 打开/创建今日笔记；`!` 向 `after_note_open` 传递 `switch_root=true` |
 | `:ObsidianResolveConflict` | 无 | 处理当前笔记的外部修改：查看 diff、保留 buffer 或重新加载磁盘 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
@@ -429,7 +442,7 @@ require("lualine").setup({
 | 事件 | 触发时机 | 携带数据 |
 |------|---------|---------|
 | `User MiniObsidianSetup` | `setup()` 完成后 | 无 |
-| `User MiniObsidianVaultSwitch` | 切换 vault 后（包括 cwd 已更新） | `{ name: string, path: string }` |
+| `User MiniObsidianVaultSwitch` | 切换 vault 后（默认不修改 cwd） | `{ name: string, path: string }` |
 
 ```lua
 -- 示例：vault 切换后刷新 neo-tree 根目录
@@ -479,7 +492,7 @@ require("miniobsidian").setup({
 
 ### `on_vault_switch`
 
-在 `vault.do_switch()` 更新运行时状态、设置 cwd、触发 `MiniObsidianVaultSwitch` 事件后调用。文件树刷新等副作用由此回调负责。
+在 `vault.do_switch()` 更新运行时状态并触发 `MiniObsidianVaultSwitch` 事件后调用。除非显式启用 `change_cwd_on_switch`，插件不会修改 cwd；文件树刷新等副作用由此回调负责。
 
 ```lua
 require("miniobsidian").setup({
@@ -536,7 +549,7 @@ end, { desc = "Obsidian: 快速切换（切换根目录）" })
 ```
 lua/miniobsidian/
 ├── init.lua          核心：setup()、vault 检测、笔记路径缓存、in_vault()
-├── vault.lua         多 vault 扫描、切换（更新 cwd）、picker UI
+├── vault.lua         多 vault 扫描、无隐式 cwd 的切换、picker UI
 ├── config_sync.lua   读取 Obsidian 官方配置（自动发现 + vault 内配置同步）
 ├── note.lua          笔记创建、快速切换、全文搜索、follow_or_create
 ├── daily.lua         每日笔记（:ObsidianToday）

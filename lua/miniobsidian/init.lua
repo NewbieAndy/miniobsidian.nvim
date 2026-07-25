@@ -15,7 +15,7 @@ local M = {}
 
 ---@class MiniObsidian.Config
 ---@field vaults_parent? string vault 父目录路径（可选；支持 ~ 展开；留空时若 auto_discover 为 true 则自动从 Obsidian 官方配置发现）
----@field default_vault? string 默认激活的 vault 目录名（省略时先尝试 obs-cli 默认配置，再取第一个）
+---@field default_vault? string 默认激活的 vault 目录名（省略时使用稳定排序后的第一个）
 ---@field auto_discover boolean 当 vaults_parent 为空时，是否自动从 Obsidian 官方 obsidian.json 发现 vault（默认 true）
 ---@field sync_obsidian_config boolean 确定活跃 vault 后，是否自动同步该 vault 内 .obsidian/*.json 配置到插件（默认 true）
 ---@field notes_subdir string   新建笔记存放的子目录（相对当前活跃 vault）
@@ -29,6 +29,8 @@ local M = {}
 ---@field external_check_interval_ms number checktime 最小间隔
 ---@field external_watch_debounce_ms number 文件系统事件防抖间隔
 ---@field watch_external_changes boolean 是否监听 Vault 目录变化以失效缓存
+---@field change_cwd_on_switch boolean 切换 Vault 时是否设置当前 tab 的 cwd（默认 false）
+---@field picker_scope "notes"|"vault" quick switch/search 的范围
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
@@ -40,62 +42,117 @@ local M = {}
 
 --- 插件默认配置，用户通过 M.setup(opts) 覆盖其中的部分字段。
 -- vault_path 为运行时内部字段，由 setup() 从 vaults_parent 扫描派生，无需手动设置。
-M.config = {
-  vaults_parent = "",
-  default_vault = "",
-  auto_discover = true, -- vaults_parent 为空时，自动从 Obsidian 官方配置发现 vault
-  sync_obsidian_config = true, -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
-  vault_path = "", -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
-  notes_subdir = "Notes",
-  dailies_folder = "",
-  daily_template = "",
-  daily_default_content = "",
-  templates_folder = "Templates",
-  attachments_folder = "Assets",
-  daily_date_format = "%Y-%m-%d",
-  external_change_mode = "prompt",
-  external_check_interval_ms = 1000,
-  external_watch_debounce_ms = 100,
-  watch_external_changes = true,
+local function new_default_config()
+  return {
+    vaults_parent = "",
+    default_vault = "",
+    auto_discover = true, -- vaults_parent 为空时，自动从 Obsidian 官方配置发现 vault
+    sync_obsidian_config = true, -- 确定活跃 vault 后，自动同步该 vault 内 .obsidian/*.json 配置
+    vault_path = "", -- 内部字段：当前活跃 vault 的绝对路径，由 setup() 自动设置
+    notes_subdir = "Notes",
+    dailies_folder = "",
+    daily_template = "",
+    daily_default_content = "",
+    templates_folder = "Templates",
+    attachments_folder = "Assets",
+    daily_date_format = "%Y-%m-%d",
+    external_change_mode = "prompt",
+    external_check_interval_ms = 1000,
+    external_watch_debounce_ms = 100,
+    watch_external_changes = true,
+    change_cwd_on_switch = false,
+    picker_scope = "notes",
 
-  --- Checkbox 循环切换状态列表（按顺序循环）。
-  -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
-  -- 可自定义：设为 { " ", "x" } 即回退到经典双态切换。
-  checkbox_states = { " ", "x" },
+    --- Checkbox 循环切换状态列表（按顺序循环）。
+    -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
+    -- 可自定义：设为 { " ", "x" } 即回退到经典双态切换。
+    checkbox_states = { " ", "x" },
 
-  ---@type fun(name: string, path: string)|nil
-  on_vault_switch = nil,
+    ---@type fun(name: string, path: string)|nil
+    on_vault_switch = nil,
 
-  ---@type fun(path: string, opts: table)|nil
-  after_note_open = nil,
+    ---@type fun(path: string, opts: table)|nil
+    after_note_open = nil,
 
-  --- 默认笔记 ID 函数：将标题转换为适合作文件名的小写 slug。
-  -- 规则：保留中文、ASCII 字母数字、空格 → 空格变 "-" → 转小写。
-  -- 示例：
-  --   "Hello World"  → "hello-world"
-  --   "我的笔记 2024" → "我的笔记-2024"
-  --   "A & B!"       → "a-b"  （& 和 ! 被剔除后两侧空格合并为单个连字符）
-  ---@param title string 笔记标题
-  ---@return string id  用作文件名的 slug
-  note_id_func = function(title)
-    -- pattern 说明：
-    --   %w                   → ASCII 字母和数字（[a-zA-Z0-9]）
-    --   %s                   → 空白字符（空格、Tab 等）
-    --   \u{2E80}-\u{9FFF}   → CJK 部首补充、笔画、汉字扩展A、康熙字典部首、
-    --                          注音符号、平假名、片假名、基本 CJK 统一汉字
-    --   \u{AC00}-\u{D7AF}   → 韩语谚文音节块
-    --   \u{F900}-\u{FAFF}   → CJK 兼容汉字
-    -- 取反（[^ ...]）意味着删掉以上范围以外的所有字符（标点、特殊符号等）
-    local id = title:gsub("[^%w%s\u{2E80}-\u{9FFF}\u{AC00}-\u{D7AF}\u{F900}-\u{FAFF}]", "")
+    --- 默认笔记 ID 函数：将标题转换为适合作文件名的小写 slug。
+    -- 规则：保留中文、ASCII 字母数字、空格 → 空格变 "-" → 转小写。
+    -- 示例：
+    --   "Hello World"  → "hello-world"
+    --   "我的笔记 2024" → "我的笔记-2024"
+    --   "A & B!"       → "a-b"  （& 和 ! 被剔除后两侧空格合并为单个连字符）
+    ---@param title string 笔记标题
+    ---@return string id  用作文件名的 slug
+    note_id_func = function(title)
+      -- pattern 说明：
+      --   %w                   → ASCII 字母和数字（[a-zA-Z0-9]）
+      --   %s                   → 空白字符（空格、Tab 等）
+      --   \u{2E80}-\u{9FFF}   → CJK 部首补充、笔画、汉字扩展A、康熙字典部首、
+      --                          注音符号、平假名、片假名、基本 CJK 统一汉字
+      --   \u{AC00}-\u{D7AF}   → 韩语谚文音节块
+      --   \u{F900}-\u{FAFF}   → CJK 兼容汉字
+      -- 取反（[^ ...]）意味着删掉以上范围以外的所有字符（标点、特殊符号等）
+      local id = title:gsub("[^%w%s\u{2E80}-\u{9FFF}\u{AC00}-\u{D7AF}\u{F900}-\u{FAFF}]", "")
 
-    -- 将一个或多个连续空白替换为单个连字符，生成 kebab-case 风格 slug
-    id = id:gsub("%s+", "-")
+      -- 将一个或多个连续空白替换为单个连字符，生成 kebab-case 风格 slug
+      id = id:gsub("%s+", "-")
 
-    -- string.lower 仅影响 ASCII 范围，中文字符不受影响
-    id = id:lower()
-    return id
-  end,
-}
+      -- string.lower 仅影响 ASCII 范围，中文字符不受影响
+      id = id:lower()
+      return id
+    end,
+  }
+end
+
+function M.default_config()
+  return new_default_config()
+end
+
+M.config = new_default_config()
+
+---@param config MiniObsidian.Config
+---@return string[]
+function M.validate_config(config)
+  local errors = {}
+  local function add(condition, message)
+    if not condition then
+      errors[#errors + 1] = message
+    end
+  end
+
+  add(type(config.vaults_parent) == "string", "vaults_parent 必须是字符串")
+  add(type(config.default_vault) == "string", "default_vault 必须是字符串")
+  add(type(config.auto_discover) == "boolean", "auto_discover 必须是 boolean")
+  add(type(config.sync_obsidian_config) == "boolean", "sync_obsidian_config 必须是 boolean")
+  add(type(config.change_cwd_on_switch) == "boolean", "change_cwd_on_switch 必须是 boolean")
+  add(type(config.watch_external_changes) == "boolean", "watch_external_changes 必须是 boolean")
+  add(config.picker_scope == "notes" or config.picker_scope == "vault", "picker_scope 必须是 notes 或 vault")
+  add(
+    config.external_change_mode == "prompt"
+      or config.external_change_mode == "reload"
+      or config.external_change_mode == "notify",
+    "external_change_mode 必须是 prompt、reload 或 notify"
+  )
+  add(
+    type(config.external_check_interval_ms) == "number" and config.external_check_interval_ms >= 0,
+    "external_check_interval_ms 必须是非负数"
+  )
+  add(
+    type(config.external_watch_debounce_ms) == "number" and config.external_watch_debounce_ms >= 0,
+    "external_watch_debounce_ms 必须是非负数"
+  )
+  add(type(config.daily_date_format) == "string" and config.daily_date_format ~= "", "daily_date_format 不能为空")
+  add(type(config.note_id_func) == "function", "note_id_func 必须是函数")
+  add(type(config.checkbox_states) == "table" and #config.checkbox_states > 0, "checkbox_states 不能为空")
+
+  local path_policy = require("miniobsidian.path")
+  for _, key in ipairs({ "notes_subdir", "dailies_folder", "templates_folder", "attachments_folder" }) do
+    local value = config[key]
+    local valid = type(value) == "string" and path_policy.validate_logical(value, { allow_empty = true })
+    add(valid ~= nil and valid ~= false, key .. " 必须是安全的 Vault 相对路径")
+  end
+
+  return errors
+end
 
 -- ──────────────────────────────────────────────
 -- 笔记路径扫描缓存
@@ -264,7 +321,17 @@ function M.setup(opts)
     M._user_config_keys[k] = true
   end
 
-  M.config = vim.tbl_deep_extend("force", M.config, opts)
+  M.config = vim.tbl_deep_extend("force", new_default_config(), opts)
+  M.active_vault_name = ""
+  M.invalidate_cache()
+
+  local config_errors = M.validate_config(M.config)
+  if #config_errors > 0 then
+    for _, message in ipairs(config_errors) do
+      M.notify("配置无效: " .. message, vim.log.levels.ERROR)
+    end
+    return false, config_errors
+  end
 
   -- 展开 vaults_parent 中的 ~ 和环境变量
   M.config.vaults_parent = vim.fn.expand(M.config.vaults_parent)
@@ -282,7 +349,7 @@ function M.setup(opts)
       vim.log.levels.ERROR
     )
   else
-    -- 默认使用第一个 vault，后续可能被 obs-cli 默认配置覆盖
+    -- 默认使用稳定排序后的第一个 vault
     local target = vaults[1]
 
     -- 若用户指定了 default_vault，尝试匹配
@@ -325,6 +392,7 @@ function M.setup(opts)
 
   -- 触发自定义 User 事件，通知 plugin/miniobsidian.lua 注册后续 autocmd。
   vim.api.nvim_exec_autocmds("User", { pattern = "MiniObsidianSetup" })
+  return true
 end
 
 return M

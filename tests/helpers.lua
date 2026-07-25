@@ -20,6 +20,8 @@ function M.configure(vault)
   core.config.external_check_interval_ms = 1000
   core.config.external_watch_debounce_ms = 100
   core.config.watch_external_changes = true
+  core.config.change_cwd_on_switch = false
+  core.config.picker_scope = "notes"
   core.invalidate_cache()
   return core
 end

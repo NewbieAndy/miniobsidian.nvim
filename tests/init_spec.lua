@@ -34,4 +34,39 @@ describe("miniobsidian init", function()
     assert.equals("Personal", core.active_vault_name)
     helpers.cleanup(parent)
   end)
+
+  it("rebuilds configuration from defaults on every setup", function()
+    local parent = vim.fn.tempname()
+    vim.fn.mkdir(parent .. "/Personal/.obsidian", "p")
+    local core = require("miniobsidian")
+    assert.is_true(core.setup({
+      vaults_parent = parent,
+      auto_discover = false,
+      sync_obsidian_config = false,
+      notes_subdir = "Custom",
+      picker_scope = "vault",
+      change_cwd_on_switch = true,
+    }))
+    assert.equals("Custom", core.config.notes_subdir)
+
+    assert.is_true(core.setup({
+      vaults_parent = parent,
+      auto_discover = false,
+      sync_obsidian_config = false,
+    }))
+    assert.equals("Notes", core.config.notes_subdir)
+    assert.equals("notes", core.config.picker_scope)
+    assert.is_false(core.config.change_cwd_on_switch)
+    helpers.cleanup(parent)
+  end)
+
+  it("rejects invalid enum, interval, and Vault-relative path settings", function()
+    local core = require("miniobsidian")
+    local config = core.default_config()
+    config.picker_scope = "somewhere"
+    config.external_check_interval_ms = -1
+    config.notes_subdir = "../outside"
+    local errors = core.validate_config(config)
+    assert.equals(3, #errors)
+  end)
 end)

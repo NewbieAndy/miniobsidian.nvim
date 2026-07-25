@@ -29,13 +29,13 @@ vim.g.loaded_miniobsidian = true
 -- 新建一篇笔记（快捷创建，始终落到 notes_subdir 目录）。title 可选：
 --   • 提供 title：直接在 notes_subdir 目录创建并跳转。
 --   • 不提供（nargs="?"）：弹出 vim.ui.input 交互框让用户输入标题。
--- 使用 !（bang）时不切换根目录，适合临时创建笔记。
+-- 使用 !（bang）时向 after_note_open 传递 switch_root=true；是否切换 cwd 由用户回调决定。
 vim.api.nvim_create_user_command("ObsidianNew", function(opts)
   require("miniobsidian.note").new_note(opts.args ~= "" and opts.args or nil, { switch_root = opts.bang })
 end, {
   nargs = "?",
   bang = true,
-  desc = "新建 Obsidian 笔记（到默认 notes_subdir 目录）；! 同时切换根目录",
+  desc = "新建 Obsidian 笔记（到默认 notes_subdir）；! 请求 after_note_open 切换根目录",
 })
 
 --- :ObsidianNewHere
@@ -116,10 +116,10 @@ end, {
 -- 打开（或创建）今日每日笔记。
 --   • 文件路径：vault_path/dailies_folder/{daily_date_format}.md
 --   • 文件不存在时自动写入带 frontmatter 的初始内容，并使补全 cache 失效。
---   • 使用 !（bang）时不切换根目录，适合临时查看日记。
+--   • 使用 !（bang）时向 after_note_open 传递 switch_root=true。
 vim.api.nvim_create_user_command("ObsidianToday", function(opts)
   require("miniobsidian.daily").open_today({ switch_root = opts.bang })
-end, { bang = true, desc = "打开今日每日笔记；! 同时切换根目录" })
+end, { bang = true, desc = "打开今日每日笔记；! 请求 after_note_open 切换根目录" })
 
 --- :ObsidianSetup
 -- 使用默认配置初始化插件（等价于 require("miniobsidian").setup()）。

@@ -83,7 +83,7 @@ end
 -- 调用后，所有子模块（note/template/completion 等）将自动使用新 vault 路径，
 -- 因为它们均通过 require("miniobsidian").config.vault_path 读取路径。
 -- 若 sync_obsidian_config 为 true，还会读取新 vault 内 .obsidian/*.json 并同步配置。
--- 同时将 Neovim 的工作目录切换到新 vault，触发 User MiniObsidianVaultSwitch 事件，
+-- 可选将当前 tab 的工作目录切换到新 vault，触发 User MiniObsidianVaultSwitch 事件，
 -- 并调用用户配置的 on_vault_switch 回调（文件树刷新等副作用由回调负责）。
 ---@param entry {name: string, path: string} 目标 vault 条目
 function M.do_switch(entry)
@@ -110,11 +110,12 @@ function M.do_switch(entry)
     end
   end
 
-  -- 同步 Neovim 全局工作目录，确保 snacks.picker / neo-tree / root 缓存等
-  -- 依赖 cwd 的工具能感知到 vault 已切换。
-  local ok, err = pcall(vim.api.nvim_set_current_dir, real)
-  if not ok then
-    vim.notify("[miniobsidian] 切换工作目录失败: " .. tostring(err), vim.log.levels.WARN)
+  -- 默认不修改 cwd；显式开启时仅设置当前 tab，避免影响其他项目/tab。
+  if core.config.change_cwd_on_switch then
+    local ok, err = pcall(vim.cmd, "tcd " .. vim.fn.fnameescape(real))
+    if not ok then
+      vim.notify("[miniobsidian] 切换 tab-local 工作目录失败: " .. tostring(err), vim.log.levels.WARN)
+    end
   end
 
   -- 触发自定义 User 事件，外部插件可通过监听此事件做额外刷新（如 root 缓存失效）。

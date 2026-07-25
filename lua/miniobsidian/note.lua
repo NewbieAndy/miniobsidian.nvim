@@ -409,7 +409,8 @@ local MARKDOWN_EXTS = { "md" }
 ---@return string notes_dir 笔记目录绝对路径（无末尾斜杠）
 local function get_notes_dir()
   local cfg = require("miniobsidian").config
-  local resolved, err = path_policy.resolve(cfg.vault_path, cfg.notes_subdir or "", { allow_empty = true })
+  local scope = cfg.picker_scope == "vault" and "" or (cfg.notes_subdir or "")
+  local resolved, err = path_policy.resolve(cfg.vault_path, scope, { allow_empty = true })
   if not resolved then
     vim.notify("[miniobsidian] 笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
     return nil
