@@ -58,6 +58,23 @@ describe("external changes", function()
     assert.same({ "# Status", "", "Changed on disk" }, vim.fn.readfile(path))
   end)
 
+  it("blocks a stale write without requiring FocusGained or checktime", function()
+    vim.api.nvim_buf_set_lines(buf, 2, 3, false, { "Changed in Neovim" })
+    external_write({ "# Status", "", "Changed on disk while focused" })
+
+    local original_select = vim.ui.select
+    vim.ui.select = function(_, _, callback)
+      callback(external.actions.keep)
+    end
+    local wrote = pcall(vim.cmd, "write")
+    vim.ui.select = original_select
+
+    assert.is_false(wrote)
+    assert.is_not_nil(external.get_conflict(buf))
+    assert.equals("Changed in Neovim", vim.api.nvim_buf_get_lines(buf, 2, 3, false)[1])
+    assert.same({ "# Status", "", "Changed on disk while focused" }, vim.fn.readfile(path))
+  end)
+
   it("reloads an unmodified buffer only when explicitly configured", function()
     require("miniobsidian").config.external_change_mode = "reload"
     external_write({ "# Status", "", "Changed on disk" })

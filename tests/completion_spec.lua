@@ -33,4 +33,22 @@ describe("wikilink completion", function()
     table.sort(inserted)
     assert.same({ "[[Areas/Index]]", "[[Projects/Index]]" }, inserted)
   end)
+
+  it("returns preview read failures outside the libuv fast event", function()
+    package.loaded["blink.cmp.types"] = { CompletionItemKind = { File = 17 } }
+    local source = require("miniobsidian.completion").new({})
+    local resolved
+    local in_fast_event
+
+    source:resolve({ _path = vault .. "/missing.md" }, function(item)
+      resolved = item
+      in_fast_event = vim.in_fast_event()
+    end)
+
+    assert.is_true(vim.wait(1000, function()
+      return resolved ~= nil
+    end))
+    assert.is_false(in_fast_event)
+    assert.equals(vault .. "/missing.md", resolved._path)
+  end)
 end)

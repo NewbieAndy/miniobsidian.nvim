@@ -4,6 +4,7 @@ local uv = vim.uv or vim.loop
 local watcher
 local debounce_timer
 local conflicts = {}
+local disk_versions = {}
 local checking = false
 local last_check_ms = 0
 
@@ -30,6 +31,30 @@ local function disk_text(buf)
   local content = file:read("*a")
   file:close()
   return content
+end
+
+local function disk_version(buf)
+  local path = vim.api.nvim_buf_get_name(buf)
+  local file, err = io.open(path, "rb")
+  if not file then
+    if not uv.fs_stat(path) then
+      return "missing"
+    end
+    return nil, err or "无法读取磁盘文件"
+  end
+  local content = file:read("*a")
+  file:close()
+  return "sha256:" .. vim.fn.sha256(content)
+end
+
+local function remember_disk_version(buf)
+  if not is_markdown_buffer(buf) then
+    return
+  end
+  local version = disk_version(buf)
+  if version then
+    disk_versions[buf] = version
+  end
 end
 
 local function buffer_text(buf)
@@ -79,6 +104,20 @@ function M.before_write(buf)
     return false,
       "检测到磁盘版本已被外部修改；请先执行 :ObsidianResolveConflict 查看 diff、保留或重新加载"
   end
+
+  local expected = disk_versions[buf]
+  local actual, version_err = disk_version(buf)
+  if expected and (not actual or actual ~= expected) then
+    M.mark_conflict(buf, actual and "changed-before-write" or ("unreadable-before-write: " .. tostring(version_err)))
+    vim.schedule(function()
+      if vim.api.nvim_buf_is_valid(buf) then
+        M.prompt(buf)
+      end
+    end)
+    return false,
+      "检测到磁盘版本已在当前编辑期间发生变化；请先执行 :ObsidianResolveConflict 查看 diff、保留或重新加载"
+  end
+
   return true
 end
 
@@ -279,6 +318,7 @@ function M.setup_autocmds(group)
   for _, buf in ipairs(vim.api.nvim_list_bufs()) do
     if is_markdown_buffer(buf) then
       vim.api.nvim_set_option_value("autoread", false, { buf = buf })
+      remember_disk_version(buf)
     end
   end
 
@@ -324,13 +364,14 @@ function M.setup_autocmds(group)
     end,
   })
 
-  vim.api.nvim_create_autocmd({ "BufReadPost", "BufWritePost" }, {
+  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile", "BufWritePost" }, {
     group = group,
     pattern = "*.md",
     callback = function(ev)
       if is_markdown_buffer(ev.buf) then
         -- 由 external_change_mode 统一控制，避免用户全局 autoread 绕过冲突策略。
         vim.api.nvim_set_option_value("autoread", false, { buf = ev.buf })
+        remember_disk_version(ev.buf)
         M.clear(ev.buf)
         require("miniobsidian").invalidate_cache()
       end
@@ -341,6 +382,7 @@ function M.setup_autocmds(group)
     group = group,
     callback = function(ev)
       M.clear(ev.buf)
+      disk_versions[ev.buf] = nil
     end,
   })
 

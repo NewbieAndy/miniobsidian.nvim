@@ -54,19 +54,24 @@ fixtures. See [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-
 | 📁 **Context-aware Creation** | When focused in a file explorer (snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw), creates the note in the directory under the cursor; if the cursor is on a file, creates it in that file's parent directory; target must be inside the current vault |
 | 🔀 **Quick Switch** | Fuzzy-find Markdown notes with a `snacks.nvim` picker; defaults to `notes_subdir` and can cover the whole Vault |
 | 🔍 **Full-text Search** | Ripgrep-powered note search with live preview; defaults to `notes_subdir` and can cover the whole Vault |
-| 🔗 **Wiki Link Navigation** | `<CR>` follows `[[links]]`; supports `[[note]]`, `[[note\|alias]]`, `[[note#heading]]`, and `[[folder/note]]` formats; three-tier lookup (exact → case-insensitive → path-prefix strip); prompts to create if not found |
-| ✅ **Multi-state Checkbox** | Cycle through `[ ]` → `[/]` → `[x]` → `[-]` (fully configurable); plain list items auto-upgrade to checkboxes; `clear()` strips the checkbox back to a plain list item in one shot |
+| 🔗 **Wiki Link Navigation** | `<CR>` follows links with aliases, qualified paths, headings, and block IDs; duplicate basenames require explicit selection instead of opening an arbitrary note; missing qualified targets can be created in place |
+| ✅ **Checkbox State Cycle** | Defaults to `[ ]` ↔ `[x]` and can be extended to `[ ]` → `[/]` → `[x]` → `[-]` or any configured sequence; plain list items can be upgraded and cleared |
 | 🔗 **Wiki Link Autocomplete** | Type `[[` to fuzzy-complete any note name in the vault; duplicate-named notes shown as `parent/name` to disambiguate; **hovering an item shows a preview of the note's first 10 lines** |
 | ✅ **Checkbox Autocomplete** | Type `- [`, `* [`, or `+ [` to get all states from your `checkbox_states` config as candidates |
-| 🖼️ **Image Paste** | Paste clipboard images directly into notes (macOS only, built-in JXA script, no extra tools needed); handles both screenshots and files copied from Finder; auto-detects format (PNG / JPG / GIF / WEBP / HEIC / HEIF / TIFF / BMP / SVG); input prompt pre-fills a timestamp filename; inserts a **relative path** link that stays valid even when the vault is moved |
-| 📄 **Template System** | Pick from `Templates/` (subdirectory organization supported) and insert with variable substitution; 8 built-in variables (see table below); `new_template()` creates a new template pre-filled with a skeleton |
+| 🖼️ **Image Paste** | macOS-only built-in JXA; screenshots/browser images become PNG/JPG/GIF, while Finder-copied files preserve formats such as WEBP/HEIC/HEIF/TIFF/BMP/SVG; inserts a portable relative link |
+| 📄 **Template System** | Pick recursively from `Templates/`; supports six named variables plus custom `{{date:FORMAT}}`; unknown variables are preserved with a warning |
 | 📅 **Daily Note** | Opens or creates today's note while syncing Obsidian Daily Notes folder, format, and template settings; creates an empty file when no template is configured and never overwrites an existing note |
+| 🛡️ **External-change protection** | `checktime` and a Vault watcher detect changes; every write verifies a SHA-256 disk baseline, including while Neovim stays focused |
+| 🧰 **Optional CLI workflows** | Validates `obs-cli/v2` and `vault-contract/v1`; provides dry-run + revision/plan_hash safe move and readonly Vault audit |
+| 🤖 **Agent collaboration** | Builds bounded handoff payloads and handles structured results with changed-file summaries, unified diffs, and dirty-buffer three-way views |
 
 ---
 
 ### Checkbox state reference
 
 The following states have built-in descriptions shown in autocomplete candidates. Mix and match any subset in `checkbox_states`:
+
+The default configuration uses only `{ " ", "x" }`; add other states explicitly.
 
 | State char | Meaning | Markdown example |
 |-----------|---------|-----------------|
@@ -109,15 +114,23 @@ The following states have built-in descriptions shown in autocomplete candidates
 | Dependency | Purpose | Install |
 |-----------|---------|---------|
 | **Neovim ≥ 0.10.4** | Required; CI verifies both 0.10.4 and stable | — |
-| [snacks.nvim](https://github.com/folke/snacks.nvim) | Picker UI (quick switch, full-text search, template/vault selection) | lazy.nvim |
+| [snacks.nvim](https://github.com/folke/snacks.nvim) | Required for quick switch/search; template and Vault selection fall back to `vim.ui.select` | lazy.nvim (optional) |
 | [blink.cmp](https://github.com/Saghen/blink.cmp) | Autocomplete (wiki links + checkboxes, **optional**) | lazy.nvim |
-| `ripgrep` | Full-text search backend | `brew install ripgrep` |
+| `ripgrep` | Required only for full-text search | `brew install ripgrep` (optional) |
 | `osascript` | Image paste (macOS system built-in, macOS only) | — |
+| [`obs-cli`](https://github.com/andy-neoaira/obs-cli) | Safe move, Vault audit, and built-in Agent handoff | Optional advanced capability |
 
 Health check:
 
 ```vim
 :checkhealth miniobsidian
+```
+
+Built-in help:
+
+```vim
+:help miniobsidian
+:help miniobsidian-zh
 ```
 
 ---
@@ -210,10 +223,10 @@ require("miniobsidian").setup({
   -- The plugin scans for subdirectories that contain a .obsidian/ folder.
   -- Supports ~ expansion and iCloud Drive paths.
   -- Leave empty to auto-discover vaults from Obsidian's official config when auto_discover is true.
-  vaults_parent = "~/Documents/Obsidian",
+  vaults_parent = "",
 
   -- Name of the vault to activate on startup (first vault found if omitted, sorted alphabetically)
-  default_vault = "MyVault",
+  default_vault = "",
 
   -- When vaults_parent is empty, auto-discovers vaults from Obsidian's official obsidian.json.
   -- Default true; set to false to require manual vaults_parent.
@@ -264,6 +277,10 @@ require("miniobsidian").setup({
   -- Vault switching leaves cwd unchanged by default; true uses tab-local :tcd only.
   change_cwd_on_switch = false,
 
+  -- Optional callbacks; nil by default.
+  on_vault_switch = nil, -- function(name, path) ... end
+  after_note_open = nil, -- function(path, opts) ... end
+
   -- Optional obs-cli adapter; local plugin features never depend on the CLI.
   -- false: disabled; "auto": probe asynchronously when present (default);
   -- true: explicitly enabled, with failures surfaced by :checkhealth.
@@ -275,9 +292,7 @@ require("miniobsidian").setup({
 
   -- Optional Agent handoff bridge; no Agent framework is required.
   agent = {
-    handler = function(payload)
-      MyAgent.submit(payload) -- Receives miniobsidian.agent-handoff/v1.
-    end,
+    handler = nil,               -- function(payload) ... end; unset by default.
     confirm_content = true,      -- Preview in-memory content before sending.
     large_selection_lines = 200, -- Large selections always require confirmation.
   },
@@ -347,7 +362,9 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 - `:ObsidianAgentAnalyze` selects readonly permissions and
   `obsidian-knowledge-synthesis`. Dirty buffers are limited to confirmed readonly
   memory context. `:ObsidianAgentUpdate` requires a saved buffer and grants
-  `obsidian-safe-note-update` write permission only for the current path.
+  `obsidian-safe-note-update` write permission only for the current path. The built-in
+  handoff requires compatible `obs-cli` capabilities: `note.get` for analysis and
+  both `note.get` and `note.patch` for updates.
 - When the Agent finishes, the integration calls
   `require("miniobsidian.agent_result").handle(result)` with a
   `miniobsidian.agent-result/v1` result. It shows changed files, revisions, and
@@ -363,7 +380,7 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianNew[!] [title]` | optional | Create in `notes_subdir`; `!` passes `switch_root=true` to `after_note_open` |
 | `:ObsidianNewHere` | none | Create a note in the current file explorer's focused directory (snacks explorer / neo-tree / nvim-tree / oil.nvim / netrw) |
 | `:ObsidianSwitch` | none | Open quick-switch picker |
-| `:ObsidianSearch [query]` | optional | Full-text search; prompts if omitted |
+| `:ObsidianSearch [query]` | optional | Open the full-text search picker; starts with an empty query when omitted |
 | `:ObsidianSwitchVault` | none | Open vault selector and switch |
 | `:ObsidianTemplate` | none | Pick and insert a template |
 | `:ObsidianNewTemplate [name]` | optional | Create a new template file; prompts if omitted |
@@ -373,8 +390,8 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianCLIRefresh` | none | Refresh the optional obs-cli capability cache asynchronously |
 | `:ObsidianMove [target]` | optional | Preview a dry-run and safely move the current note after confirmation; requires `note.get` / `note.move` |
 | `:ObsidianVaultAudit` | none | Open a readonly Vault JSON snapshot; requires `note.list` |
-| `:[range]ObsidianAgentAnalyze [intent]` | optional | Hand off the current note/selection for bounded readonly Agent analysis |
-| `:[range]ObsidianAgentUpdate [intent]` | optional | Hand off the current note/selection for a safe update limited to that path |
+| `:[range]ObsidianAgentAnalyze [intent]` | optional | Bounded readonly analysis; requires `agent.handler` and `obs-cli note.get` |
+| `:[range]ObsidianAgentUpdate [intent]` | optional | Path-limited update; requires a saved buffer, `agent.handler`, and `note.get` / `note.patch` |
 | `:ObsidianAgentLastResult` | none | Reopen the latest Agent result changed-files and recovery summary |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
@@ -440,16 +457,18 @@ require("miniobsidian").invalidate_cache()             -- Force-clear the note p
 |--------|---------|-------|
 | Simple | `[[my-note]]` | Jumps to the matching note |
 | With alias | `[[my-note\|Display text]]` | Alias is for rendering only; jump target is `my-note` |
-| With heading | `[[my-note#Section]]` | Jumps to `my-note` (heading anchor handled by Markdown renderer) |
-| With path | `[[folder/my-note]]` | Extracts the last segment `my-note` for lookup |
+| With heading | `[[my-note#Section]]` | Opens the note and locates the matching heading |
+| Block ID | `[[my-note#^block-id]]` | Opens the note and locates the exact block ID |
+| Qualified path | `[[folder/my-note]]` | Resolves the complete Vault-relative Note ID |
 
-**Three-tier lookup strategy (tried in order):**
+**Resolution rules:**
 
-1. **Exact match** — stem is identical (`my-note` → `my-note.md`)
-2. **Case-insensitive match** — `[[My Note]]` finds `my-note.md`
-3. **Path-prefix strip** — `[[folder/note]]` is searched as `note`
+1. Targets containing a directory match the complete Vault-relative Note ID, then try case-insensitive matching.
+2. Bare targets match by basename. Multiple matches open an explicit disambiguation selector.
+3. Headings support duplicate-anchor suffixes such as `-1`; block IDs require an exact match.
+4. Missing targets can be created after confirmation, preserving a qualified target directory.
 
-The first tier that finds a match jumps immediately. If all three fail, a prompt offers to create the note.
+The plugin never silently chooses the first scanned file when basenames are duplicated.
 
 ---
 
@@ -471,6 +490,9 @@ The plugin runs throttled native `checktime` checks on `FocusGained` / `BufEnter
 - Default `external_change_mode = "prompt"` preserves the in-memory buffer and offers diff, keep, and reload actions.
 - `reload` automatically reloads clean buffers only; unsaved buffers still enter the conflict flow.
 - `notify` preserves the buffer and warns; run `:ObsidianResolveConflict` to reopen the actions.
+- Every loaded Vault Markdown buffer records a SHA-256 disk-content baseline. `BufWritePre`
+  verifies it synchronously, so stale writes are blocked even before a focus change or
+  `checktime`.
 - Once a conflict is detected, normal `:write` is blocked so a stale buffer cannot silently overwrite changes from Obsidian, sync tools, or an Agent.
 
 ---
@@ -507,6 +529,7 @@ The plugin fires Neovim `User` events so that other plugins or your config can r
 |-------|-----------|------|
 | `User MiniObsidianSetup` | `setup()` completes | none |
 | `User MiniObsidianVaultSwitch` | Vault is switched (cwd unchanged by default) | `{ name: string, path: string }` |
+| `User MiniObsidianNoteOpened` | Note creation or Daily Note open workflow completes | `{ path: string, opts: table }` |
 
 ```lua
 -- Example: refresh neo-tree root after switching vaults
@@ -523,24 +546,62 @@ vim.api.nvim_create_autocmd("User", {
 
 ---
 
+## Callback hooks
+
+`after_note_open(path, opts)` runs after note creation and Daily Note open
+workflows. `on_vault_switch(name, path)` runs after the active Vault changes.
+Both are optional and callback errors are contained by the plugin.
+
+```lua
+require("miniobsidian").setup({
+  after_note_open = function(path, opts)
+    if opts.switch_root then
+      vim.cmd("tcd " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":h")))
+    end
+  end,
+  on_vault_switch = function(_, path)
+    -- Refresh a file tree, statusline, or other Vault-scoped UI here.
+    vim.notify("Active Vault: " .. path)
+  end,
+})
+```
+
+`quick_switch()` and `search()` are asynchronous picker workflows and therefore
+do not call `after_note_open`. If a picker-specific side effect is required,
+register a scoped `BufEnter` autocmd in the caller.
+
+---
+
 ## File structure
 
 ```
 lua/miniobsidian/
-├── init.lua          Core: setup(), vault detection, note path cache, in_vault()
-├── vault.lua         Multi-vault discovery, switching without implicit cwd, picker UI
-├── config_sync.lua   Obsidian official config reader (auto-discovery + vault setting sync)
-├── note.lua          Note creation, quick switch, full-text search, follow_or_create
-├── daily.lua         Daily note (:ObsidianToday)
-├── link.lua          Wiki link parsing and navigation (link_at_cursor, follow_link_or_toggle)
-├── checkbox.lua      Multi-state checkbox cycle and clear
-├── completion.lua    blink.cmp source (wiki links + checkboxes + hover preview)
-├── template.lua      Template selection, variable substitution, insertion (subdirs supported)
-├── image.lua         Clipboard image paste (macOS)
+├── init.lua              Config, setup, note cache, and shared helpers
+├── path.lua              Vault path policy and symlink-escape protection
+├── vault.lua             Vault discovery, switching, and picker
+├── config_sync.lua       Obsidian config discovery and synchronization
+├── note.lua              Note creation, pickers, search, and link-target opening
+├── wikilink.lua          Wikilink parsing, disambiguation, and fragment lookup
+├── link.lua              Cursor link detection and checkbox compound action
+├── daily.lua             Daily Note resolution and creation
+├── datetime.lua          Moment subset conversion and date rendering
+├── template.lua          Template creation, selection, and rendering
+├── checkbox.lua          Checkbox state cycle and clear
+├── completion.lua        blink.cmp completion and async preview
+├── image.lua             macOS clipboard image paste
+├── external_changes.lua  External-change detection, SHA-256 write guard, and diff
+├── cli.lua               obs-cli capability and protocol adapter
+├── move.lua              Safe move with dry-run and revision/plan_hash
+├── handoff.lua           Bounded Agent handoff payload
+├── agent_result.lua      Agent results, diffs, and three-way conflict views
+├── health.lua            :checkhealth implementation
 └── scripts/
-    └── paste_image.js  macOS JXA script (image saving, format auto-detection)
+    └── paste_image.js     macOS JXA image-saving script
 plugin/
-└── miniobsidian.lua  User command registration + autocmds (BufWritePost cache refresh, TextChangedI completion trigger)
+└── miniobsidian.lua      User command and autocmd registration
+doc/
+├── miniobsidian.txt      English Vim help
+└── miniobsidian.zh.txt   Chinese Vim help
 ```
 
 ---

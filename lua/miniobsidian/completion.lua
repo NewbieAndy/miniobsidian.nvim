@@ -277,16 +277,18 @@ function M:resolve(item, callback)
     return callback(item)
   end
 
+  local finish = vim.schedule_wrap(callback)
+
   -- 异步读取笔记文件前 10 行作为预览，避免阻塞主线程
   vim.uv.fs_open(item._path, "r", 438, function(err, fd)
     if err or not fd then
-      return callback(item)
+      return finish(item)
     end -- 打开失败，安全回退
 
     vim.uv.fs_read(fd, 2048, 0, function(err2, data)
       vim.uv.fs_close(fd, function() end) -- 无论成功与否，关闭文件描述符
       if err2 or not data then
-        return callback(item)
+        return finish(item)
       end
 
       -- 截取前 10 行，拼成 markdown 字符串
@@ -300,15 +302,13 @@ function M:resolve(item, callback)
         end
       end
 
-      -- 通过 vim.schedule 切回主线程，避免在 libuv 回调中操作 nvim API
-      vim.schedule(function()
-        callback({
-          documentation = {
-            kind = "markdown",
-            value = table.concat(lines, "\n"), -- 返回 markdown 格式预览
-          },
-        })
-      end)
+      -- 所有成功与失败分支统一切回主线程，避免 callback 触发 Neovim API 的 fast-event 限制。
+      finish({
+        documentation = {
+          kind = "markdown",
+          value = table.concat(lines, "\n"), -- 返回 markdown 格式预览
+        },
+      })
     end)
   end)
 end

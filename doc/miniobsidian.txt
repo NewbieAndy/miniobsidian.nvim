@@ -9,20 +9,23 @@ It provides:
   - Multi-vault support (auto-discovery under a parent folder)
   - Note creation (with YAML frontmatter) and quick switching
   - Ripgrep-powered full-text search (via snacks.nvim picker)
-  - Wiki link navigation and completion integration (blink.cmp optional)
+  - Wikilink navigation with path disambiguation, headings, and block IDs
   - Checkbox management (toggle/clear, multi-state)
   - Image pasting on macOS (osascript)
   - Templates and daily notes
+  - External-change detection with a SHA-256 write guard
+  - Optional obs-cli move/audit and Agent handoff workflows
 
 ==============================================================================
 REQUIREMENTS                                                   *miniobsidian-requirements*
 
 Required:
-  - Neovim >= 0.11.2
-  - snacks.nvim
-  - ripgrep (rg)
+  - Neovim >= 0.10.4
 
 Optional:
+  - snacks.nvim (required only for quick switch and full-text search; also
+    enhances template and Vault selection)
+  - ripgrep (rg; required only for full-text search)
   - blink.cmp (wiki link / checkbox completion)
   - osascript (macOS only, for image pasting)
   - obs-cli V2 with obs-cli/v2 + vault-contract/v1 capabilities
@@ -45,9 +48,7 @@ Lua:
       timeout_ms = 3000,
     },
     agent = {
-      handler = function(payload)
-        MyAgent.submit(payload)
-      end,
+      handler = nil,
       confirm_content = true,
       large_selection_lines = 200,
     },
@@ -58,13 +59,18 @@ The CLI adapter is optional. "auto" asynchronously probes capabilities when the
 executable exists. Missing, timed-out, invalid, or incompatible CLI responses
 never disable local note features.
 
+Set agent.handler to function(payload) ... end only when connecting an Agent
+framework. Built-in Agent analyze requires obs-cli note.get; Agent update
+requires note.get and note.patch.
+
 ==============================================================================
 COMMANDS                                                     *miniobsidian-commands*
 
 All commands are registered under the "Obsidian" prefix.
 
-:ObsidianNew [title]                                         *:ObsidianNew*
+:ObsidianNew[!] [title]                                      *:ObsidianNew*
     Create a new note in notes_subdir. If [title] is omitted, prompts for input.
+    With !, passes switch_root=true to after_note_open.
 
 :ObsidianNewHere                                             *:ObsidianNewHere*
     Create a new note in the directory under your file explorer cursor.
@@ -89,11 +95,16 @@ All commands are registered under the "Obsidian" prefix.
     Paste an image from the macOS clipboard to attachments_folder and insert
     a relative Markdown image link. Prompts if omitted.
 
-:ObsidianToday                                                *:ObsidianToday*
+:ObsidianToday[!]                                             *:ObsidianToday*
     Open (or create) today's daily note under dailies_folder.
+    With !, passes switch_root=true to after_note_open.
 
 :ObsidianSetup                                               *:ObsidianSetup*
     Initialize with default config (mostly for testing).
+
+:ObsidianResolveConflict                       *:ObsidianResolveConflict*
+    Inspect and resolve an external change for the current note. Offers a diff,
+    preserving the Neovim buffer, or explicitly reloading the disk version.
 
 :ObsidianCLIRefresh                                    *:ObsidianCLIRefresh*
     Refresh the optional obs-cli capability cache asynchronously.
@@ -110,10 +121,12 @@ All commands are registered under the "Obsidian" prefix.
 :[range]ObsidianAgentAnalyze [intent]              *:ObsidianAgentAnalyze*
     Send a bounded miniobsidian.agent-handoff/v1 payload to agent.handler for
     readonly analysis. Dirty buffer content is previewed and never grants writes.
+    Requires obs-cli note.get.
 
 :[range]ObsidianAgentUpdate [intent]                *:ObsidianAgentUpdate*
     Send a handoff limited to updating the current note with
     obsidian-safe-note-update. The buffer must be saved first.
+    Requires obs-cli note.get and note.patch.
 
 :ObsidianAgentLastResult                         *:ObsidianAgentLastResult*
     Reopen the latest miniobsidian.agent-result/v1 summary. Agent integrations
@@ -133,10 +146,69 @@ User MiniObsidianVaultSwitch
     Fired after switching vaults.
     event.data contains { name = "...", path = "..." }.
 
+User MiniObsidianNoteOpened
+    Fired after a note created or opened by the note/daily workflow is ready.
+    event.data contains { path = "...", opts = { switch_root = boolean } }.
+
+==============================================================================
+WIKILINKS                                                   *miniobsidian-wikilinks*
+
+Supported forms:
+  [[Note]]
+  [[Note|Alias]]
+  [[Folder/Note]]
+  [[Note#Heading]]
+  [[Note#^block-id]]
+
+Qualified targets resolve by the complete Vault-relative Note ID. Bare targets
+resolve by basename; duplicate basenames always open a disambiguation selector.
+Heading links move the cursor to the matching heading, including duplicate
+anchor suffixes such as "-1". Block IDs require an exact match. Missing qualified
+targets can be created in their requested directory.
+
+==============================================================================
+EXTERNAL CHANGES                                     *miniobsidian-external-changes*
+
+FocusGained and BufEnter run throttled native checktime checks. FileChangedShell
+uses external_change_mode:
+
+  "prompt"  Preserve the buffer and offer diff / keep / reload.
+  "reload"  Reload only clean buffers; dirty buffers still conflict.
+  "notify"  Preserve the buffer and notify.
+
+In addition, every loaded Vault Markdown buffer records a SHA-256 baseline of
+its disk content. BufWritePre verifies that baseline synchronously, so a stale
+write is blocked even when no focus change or checktime has occurred. Use
+:ObsidianResolveConflict to reopen conflict actions.
+
+==============================================================================
+LUA API                                                         *miniobsidian-api*
+
+Core:
+  require("miniobsidian").setup(opts)
+  require("miniobsidian").get_all_notes(force?)
+  require("miniobsidian").invalidate_cache()
+  require("miniobsidian").in_vault(path)
+
+Common workflows:
+  require("miniobsidian.note").new_note(title?)
+  require("miniobsidian.note").quick_switch()
+  require("miniobsidian.note").search(query?)
+  require("miniobsidian.daily").open_today()
+  require("miniobsidian.template").insert()
+  require("miniobsidian.vault").pick_and_switch()
+
+Optional advanced workflows:
+  require("miniobsidian.move").move_current(target?)
+  require("miniobsidian.move").audit()
+  require("miniobsidian.handoff").handoff(mode, intent?, command_opts?)
+  require("miniobsidian.agent_result").handle(result)
+
 ==============================================================================
 CONFIG                                                         *miniobsidian-config*
 
-See README for the full configuration reference.
+See README.en.md for the full configuration reference. Chinese help:
+  :help miniobsidian-zh
 
 ==============================================================================
 vim:tw=78:ts=8:ft=help:norl:
