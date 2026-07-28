@@ -1,6 +1,6 @@
 local M = {}
 
-local PROTOCOL = "obs-cli/v2"
+local PROTOCOL = "obs-cli/v1"
 local VAULT_CONTRACT = "vault-contract/v1"
 
 local state = {
@@ -176,7 +176,7 @@ function M.refresh(callback)
       end
     end
     if not supports_protocol then
-      err = adapter_error("CLI_PROTOCOL_INCOMPATIBLE", "obs-cli does not advertise obs-cli/v2")
+      err = adapter_error("CLI_PROTOCOL_INCOMPATIBLE", "obs-cli does not advertise obs-cli/v1")
       reset("incompatible", err.message, err)
       notify(callback, M.state(), nil)
       return

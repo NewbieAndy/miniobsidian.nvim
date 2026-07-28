@@ -39,7 +39,7 @@ local function cli(args, expected_code)
   assert.equals(expected_code or 0, process.code, process.stderr)
   local ok, envelope = pcall(vim.json.decode, process.stdout or "")
   assert.is_true(ok, process.stdout)
-  assert.equals("obs-cli/v2", envelope.protocol_version)
+  assert.equals("obs-cli/v1", envelope.protocol_version)
   return envelope
 end
 

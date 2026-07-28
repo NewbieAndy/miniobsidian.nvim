@@ -29,7 +29,7 @@ Markdown Vault 是唯一内容事实源。Obsidian、[`obs-cli`](https://github.
 - `miniobsidian.nvim` 不强制依赖 `obs-cli`，所有基础功能在未安装 CLI 时仍完整可用。
 - `obs-cli` 不依赖 Neovim；AI Agent 通过 CLI 和场景化 Skills 进行安全的分析、比较和更新。
 - 两个项目共享 Vault、Wikilink、Daily Note 与并发写入规范，但不共享运行时依赖。
-- CLI 已作为可选高级能力 Adapter 接入；插件同时校验 `obs-cli/v2`、
+- CLI 已作为可选高级能力 Adapter 接入；插件同时校验 `obs-cli/v1`、
   `vault-contract/v1` 和所需 operation，不兼容时安全降级为纯插件模式。
 - Obsidian 官方配置只用于只读发现和设置同步，插件私有配置由插件自身管理。
 
@@ -61,7 +61,7 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
 | 📄 **模板系统** | 从 `Templates/`（支持子目录）选择并插入模板；支持 6 个命名变量和 `{{date:FORMAT}}` 自定义日期；未知变量保留并警告 |
 | 📅 **每日笔记** | 一键打开/创建今日笔记；同步 Obsidian Daily Notes 的目录、格式与模板；无模板时默认创建空文件，已有笔记只打开不覆盖 |
 | 🛡️ **外部修改保护** | `checktime` + 文件监听发现外部变化；每次写入前校验磁盘 SHA-256 基线，持续聚焦期间也能阻止 stale write |
-| 🧰 **可选 CLI 高级能力** | 兼容 `obs-cli/v2` 与 `vault-contract/v1`；提供 dry-run + revision/plan_hash 安全移动和只读 Vault 审计 |
+| 🧰 **可选 CLI 高级能力** | 兼容 `obs-cli/v1` 与 `vault-contract/v1`；提供 dry-run + revision/plan_hash 安全移动和只读 Vault 审计 |
 | 🤖 **Agent 协作** | 构造有界 handoff payload；验收结构化 result，提供 changed-files 摘要、unified diff 和 dirty buffer 三方视图 |
 
 ---
@@ -333,7 +333,7 @@ require("miniobsidian").setup({
 
 切换 vault 时（`:ObsidianSwitchVault`），若 `sync_obsidian_config` 为 true，插件会自动重新读取新 vault 的配置并应用。
 
-### V2 迁移说明
+### 行为说明
 
 - `setup()` 每次都从默认配置重新构造；重复调用不会继承上一次的自定义字段。
 - Vault 切换默认不再修改全局 cwd。需要 cwd 联动时启用 `change_cwd_on_switch = true`（tab-local），或使用 `on_vault_switch` / `after_note_open` 回调。

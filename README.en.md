@@ -30,7 +30,7 @@ The Markdown Vault is the single source of truth. Obsidian, [`obs-cli`](https://
 - `obs-cli` does not depend on Neovim; AI agents use the CLI and scenario-oriented Skills for safe analysis, comparison, and updates.
 - Both projects share specifications for Vault paths, Wikilinks, Daily Notes, and concurrent writes without sharing a runtime dependency.
 - The CLI is integrated only as an optional advanced-capability adapter. The plugin
-  checks `obs-cli/v2`, `vault-contract/v1`, and each required operation, then safely
+  checks `obs-cli/v1`, `vault-contract/v1`, and each required operation, then safely
   falls back to standalone mode when they are incompatible.
 - Official Obsidian configuration is used only for read-only discovery and settings synchronization; plugin-specific configuration remains owned by the plugin.
 
@@ -62,7 +62,7 @@ fixtures. See [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-
 | 📄 **Template System** | Pick recursively from `Templates/`; supports six named variables plus custom `{{date:FORMAT}}`; unknown variables are preserved with a warning |
 | 📅 **Daily Note** | Opens or creates today's note while syncing Obsidian Daily Notes folder, format, and template settings; creates an empty file when no template is configured and never overwrites an existing note |
 | 🛡️ **External-change protection** | `checktime` and a Vault watcher detect changes; every write verifies a SHA-256 disk baseline, including while Neovim stays focused |
-| 🧰 **Optional CLI workflows** | Validates `obs-cli/v2` and `vault-contract/v1`; provides dry-run + revision/plan_hash safe move and readonly Vault audit |
+| 🧰 **Optional CLI workflows** | Validates `obs-cli/v1` and `vault-contract/v1`; provides dry-run + revision/plan_hash safe move and readonly Vault audit |
 | 🤖 **Agent collaboration** | Builds bounded handoff payloads and handles structured results with changed-file summaries, unified diffs, and dirty-buffer three-way views |
 
 ---
@@ -339,7 +339,7 @@ When `sync_obsidian_config = true` (default), after determining the active vault
 
 When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is true the plugin automatically re-reads the new vault's settings and applies them.
 
-### V2 migration notes
+### Behavior notes
 
 - Every `setup()` call rebuilds from defaults; values from a previous call no longer leak forward.
 - Vault switching no longer changes global cwd. Enable `change_cwd_on_switch = true` for tab-local cwd, or use `on_vault_switch` / `after_note_open`.

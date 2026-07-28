@@ -51,7 +51,7 @@ Vault 的同级客户端。
       Wikilink 和 Checkbox 自动补全。
   - osascript
       macOS 图片粘贴，系统自带。
-  - obs-cli，兼容 obs-cli/v2 与 vault-contract/v1
+  - obs-cli，兼容 obs-cli/v1 与 vault-contract/v1
       安全移动、Vault 审计和内置 Agent handoff。
 
 ==============================================================================

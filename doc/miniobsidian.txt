@@ -28,7 +28,7 @@ Optional:
   - ripgrep (rg; required only for full-text search)
   - blink.cmp (wiki link / checkbox completion)
   - osascript (macOS only, for image pasting)
-  - obs-cli V2 with obs-cli/v2 + vault-contract/v1 capabilities
+  - obs-cli V1 with obs-cli/v1 + vault-contract/v1 capabilities
     (advanced integrations only)
 
 Health check:

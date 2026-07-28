@@ -4,7 +4,7 @@ local REVISION = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
 local function envelope(operation, data)
   return vim.json.encode({
-    protocol_version = "obs-cli/v2",
+    protocol_version = "obs-cli/v1",
     ok = true,
     operation = operation,
     request_id = "handoff-test",
@@ -15,8 +15,8 @@ end
 
 local function fake_cli()
   local capabilities = envelope("capabilities.get", {
-    cli_version = "v2.0.0-rc.1",
-    protocol_versions = { "obs-cli/v2" },
+    cli_version = "v1.0.0-rc.1",
+    protocol_versions = { "obs-cli/v1" },
     vault_contract = { target = "vault-contract/v1", implemented = "vault-contract/v1" },
     operations = {
       { name = "note.get", version = 1, mutating = false },

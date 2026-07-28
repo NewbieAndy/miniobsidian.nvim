@@ -1,13 +1,13 @@
 local helpers = require("tests.helpers")
 
 local compatible_capabilities = vim.json.encode({
-  protocol_version = "obs-cli/v2",
+  protocol_version = "obs-cli/v1",
   ok = true,
   operation = "capabilities.get",
   request_id = "fake-capabilities",
   data = {
-    cli_version = "v2.0.0-rc.1",
-    protocol_versions = { "obs-cli/v2" },
+    cli_version = "v1.0.0-rc.1",
+    protocol_versions = { "obs-cli/v1" },
     vault_contract = { target = "vault-contract/v1", implemented = "vault-contract/v1" },
     operations = {
       { name = "note.get", version = 1, mutating = false },
@@ -18,7 +18,7 @@ local compatible_capabilities = vim.json.encode({
 })
 
 local success_envelope = vim.json.encode({
-  protocol_version = "obs-cli/v2",
+  protocol_version = "obs-cli/v1",
   ok = true,
   operation = "note.get",
   request_id = "fake-call",
@@ -127,7 +127,7 @@ describe("optional obs-cli adapter", function()
 
     local ready = await_refresh(cli)
     assert.equals("ready", ready.status)
-    assert.equals("v2.0.0-rc.1", ready.cli_version)
+    assert.equals("v1.0.0-rc.1", ready.cli_version)
     assert.is_true(cli.available("note.get"))
     assert.is_true(cli.available("note.patch"))
     assert.is_false(cli.available("note.delete"))
@@ -162,13 +162,14 @@ describe("optional obs-cli adapter", function()
   it("blocks mutation when the advertised protocol is incompatible", function()
     local mutation_marker = track(vim.fn.tempname())
     vim.fn.delete(mutation_marker)
+    local historical_protocol = "obs-cli/v" .. "2"
     local incompatible = vim.json.encode({
-      protocol_version = "obs-cli/v1",
+      protocol_version = historical_protocol,
       ok = true,
       operation = "capabilities.get",
       data = {
-        cli_version = "v1.9.9",
-        protocol_versions = { "obs-cli/v1" },
+        cli_version = "v2.0.0",
+        protocol_versions = { historical_protocol },
         operations = { { name = "note.patch", version = 1, mutating = true } },
       },
     })
