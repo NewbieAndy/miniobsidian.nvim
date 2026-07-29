@@ -6,7 +6,6 @@
 --           不依赖 LSP——LSP definition 可通过 gd 单独使用。
 -- 依赖关系：miniobsidian.checkbox（toggle）、miniobsidian.note（follow_or_create）
 -- 对外 API：M.link_at_cursor()、M.follow_link_or_toggle()
---           已废弃：M.follow_link()、M.follow_link_or_gf()
 -- ============================================================
 local M = {}
 local wikilink = require("miniobsidian.wikilink")
@@ -77,15 +76,5 @@ function M.follow_link_or_toggle()
   end
   require("miniobsidian.checkbox").toggle()
 end
-
---- @deprecated 该函数已废弃，请改用 markdown-oxide LSP 的 gd 命令跳转链接。
--- 保留此声明是为了避免用户配置中的调用出现"attempt to call nil"错误。
-function M.follow_link() end
-
---- @deprecated 该函数已废弃，请改用 markdown-oxide LSP 的 gd 命令。
--- 原行为：光标不在 wiki link 时回退到 Vim 内置 gf（goto file）命令。
--- 废弃原因：gf 无法处理 [[...]] 格式，容易产生误操作；LSP gd 已覆盖所有场景。
--- 保留为空 stub，防止旧配置中绑定该函数时产生意外跳转行为。
-function M.follow_link_or_gf() end
 
 return M
