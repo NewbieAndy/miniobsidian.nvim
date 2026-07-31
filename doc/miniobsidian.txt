@@ -55,6 +55,9 @@ Lua:
   })
 <
 
+When dailies_folder is empty, Daily Notes are created in the Vault root. This
+default also applies when .obsidian/daily-notes.json is missing or has no folder.
+
 The CLI adapter is optional. "auto" asynchronously probes capabilities when the
 executable exists. Missing, timed-out, invalid, or incompatible CLI responses
 never disable local note features.
@@ -121,12 +124,12 @@ All commands are registered under the "Obsidian" prefix.
 :[range]ObsidianAgentAnalyze [intent]              *:ObsidianAgentAnalyze*
     Send a bounded miniobsidian.agent-handoff/v1 payload to agent.handler for
     readonly analysis. Dirty buffer content is previewed and never grants writes.
-    Requires obs-cli note.get.
+    Prompts when intent is omitted. Requires obs-cli note.get.
 
 :[range]ObsidianAgentUpdate [intent]                *:ObsidianAgentUpdate*
     Send a handoff limited to updating the current note with
-    obsidian-safe-note-update. The buffer must be saved first.
-    Requires obs-cli note.get and note.patch.
+    obsidian-safe-note-update. Prompts when intent is omitted. The buffer must be
+    saved first. Requires obs-cli note.get and note.patch.
 
 :ObsidianAgentLastResult                         *:ObsidianAgentLastResult*
     Reopen the latest miniobsidian.agent-result/v1 summary. Agent integrations
@@ -149,6 +152,10 @@ User MiniObsidianVaultSwitch
 User MiniObsidianNoteOpened
     Fired after a note created or opened by the note/daily workflow is ready.
     event.data contains { path = "...", opts = { switch_root = boolean } }.
+
+User MiniObsidianAgentHandoff
+    Fired after an Agent handoff is dispatched successfully.
+    event.data contains { request_id = "...", mode = "...", path = "..." }.
 
 ==============================================================================
 WIKILINKS                                                   *miniobsidian-wikilinks*

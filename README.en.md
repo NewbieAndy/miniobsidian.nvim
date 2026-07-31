@@ -56,7 +56,7 @@ fixtures. See [`obs-cli` Vault Conventions](https://github.com/andy-neoaira/obs-
 | 🔍 **Full-text Search** | Ripgrep-powered note search with live preview; defaults to `notes_subdir` and can cover the whole Vault |
 | 🔗 **Wiki Link Navigation** | `<CR>` follows links with aliases, qualified paths, headings, and block IDs; duplicate basenames require explicit selection instead of opening an arbitrary note; missing qualified targets can be created in place |
 | ✅ **Checkbox State Cycle** | Defaults to `[ ]` ↔ `[x]` and can be extended to `[ ]` → `[/]` → `[x]` → `[-]` or any configured sequence; plain list items can be upgraded and cleared |
-| 🔗 **Wiki Link Autocomplete** | Type `[[` to fuzzy-complete any note name in the vault; duplicate-named notes shown as `parent/name` to disambiguate; **hovering an item shows a preview of the note's first 10 lines** |
+| 🔗 **Wiki Link Autocomplete** | Type `[[` to fuzzy-complete any note name in the vault; duplicate-named notes are usually shown as `parent/name` and insert their full Vault-relative path; **hovering an item shows a preview of the note's first 10 lines** |
 | ✅ **Checkbox Autocomplete** | Type `- [`, `* [`, or `+ [` to get all states from your `checkbox_states` config as candidates |
 | 🖼️ **Image Paste** | macOS-only built-in JXA; screenshots/browser images become PNG/JPG/GIF, while Finder-copied files preserve formats such as WEBP/HEIC/HEIF/TIFF/BMP/SVG; inserts a portable relative link |
 | 📄 **Template System** | Pick recursively from `Templates/`; supports six named variables plus custom `{{date:FORMAT}}`; unknown variables are preserved with a warning |
@@ -144,6 +144,13 @@ Built-in help:
   "andy-neoaira/miniobsidian.nvim",
   lazy = true,
   ft = "markdown",
+  cmd = {
+    "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault", "ObsidianSwitch",
+    "ObsidianSearch", "ObsidianTemplate", "ObsidianNewTemplate", "ObsidianPasteImg",
+    "ObsidianToday", "ObsidianSetup", "ObsidianResolveConflict", "ObsidianCLIRefresh",
+    "ObsidianMove", "ObsidianVaultAudit", "ObsidianAgentAnalyze",
+    "ObsidianAgentUpdate", "ObsidianAgentLastResult",
+  },
   config = function()
     require("miniobsidian").setup()
     -- Zero-config startup: auto-discovers vaults from Obsidian's official config
@@ -154,12 +161,32 @@ Built-in help:
 
 ### lazy.nvim (full setup with blink.cmp autocomplete)
 
+The following is a complete plugin-list module, for example `lua/plugins/miniobsidian.lua`:
+
 ```lua
+return {
+-- Picker used by quick switch and search
+{
+  "folke/snacks.nvim",
+  priority = 1000,
+  lazy = false,
+  opts = {
+    picker = { enabled = true },
+  },
+},
+
 -- miniobsidian main plugin
 {
   "andy-neoaira/miniobsidian.nvim",
   lazy = true,
   ft = "markdown",
+  cmd = {
+    "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault", "ObsidianSwitch",
+    "ObsidianSearch", "ObsidianTemplate", "ObsidianNewTemplate", "ObsidianPasteImg",
+    "ObsidianToday", "ObsidianSetup", "ObsidianResolveConflict", "ObsidianCLIRefresh",
+    "ObsidianMove", "ObsidianVaultAudit", "ObsidianAgentAnalyze",
+    "ObsidianAgentUpdate", "ObsidianAgentLastResult",
+  },
   keys = {
     -- Global keymaps (work from any filetype; lazy loading still triggers)
     { "<leader>nn", function() require("miniobsidian.note").new_note() end,         desc = "Obsidian: New note" },
@@ -192,7 +219,7 @@ Built-in help:
 -- Register miniobsidian as a blink.cmp source
 {
   "saghen/blink.cmp",
-  optional = true,
+  version = "1.*", -- Pin the stable release; main may contain breaking changes.
   opts = function(_, opts)
     opts.sources = opts.sources or {}
     opts.sources.default = vim.list_extend(opts.sources.default or {}, { "miniobsidian" })
@@ -208,6 +235,7 @@ Built-in help:
     return opts
   end,
 },
+}
 ```
 
 ---
@@ -225,7 +253,9 @@ require("miniobsidian").setup({
   -- Leave empty to auto-discover vaults from Obsidian's official config when auto_discover is true.
   vaults_parent = "",
 
-  -- Name of the vault to activate on startup (first vault found if omitted, sorted alphabetically)
+  -- Name of the vault to activate on startup.
+  -- When omitted, auto-discovery prefers a vault marked open by Obsidian;
+  -- manual vaults_parent scanning uses the first vault sorted by name.
   default_vault = "",
 
   -- When vaults_parent is empty, auto-discovers vaults from Obsidian's official obsidian.json.
@@ -243,8 +273,9 @@ require("miniobsidian").setup({
   -- When sync_obsidian_config is true, reads newFileFolderPath from .obsidian/app.json.
   notes_subdir = "Notes",
 
-  -- Subdirectory for daily notes
+  -- Subdirectory for daily notes; "" creates them in the Vault root.
   -- When sync_obsidian_config is true, reads folder from .obsidian/daily-notes.json.
+  -- A missing file or folder setting keeps the empty-string default.
   dailies_folder = "",
 
   -- Vault-relative Note ID for the Daily Note template; synced from daily-notes.json by default.
@@ -356,9 +387,9 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 - `:ObsidianVaultAudit` opens a readonly `note.list` JSON snapshot as the safe entry
   point for later audits or batch workflows; it never applies changes automatically.
 - Agent handoff uses a user-provided `agent.handler(payload)` bridge and never starts a
-  shell. Its `miniobsidian.agent-handoff/v1` payload contains only the Vault ID,
-  current Vault-relative path/revision, explicit intent, and optional in-memory
-  selection; whole-Vault scanning is denied by default.
+  shell. Its `miniobsidian.agent-handoff/v1` payload includes request metadata, the
+  Vault ID, current Vault-relative path/revision, explicit intent, permission bounds,
+  and optional in-memory selection; whole-Vault scanning is denied by default.
 - `:ObsidianAgentAnalyze` selects readonly permissions and
   `obsidian-knowledge-synthesis`. Dirty buffers are limited to confirmed readonly
   memory context. `:ObsidianAgentUpdate` requires a saved buffer and grants
@@ -390,8 +421,8 @@ When switching vaults (`:ObsidianSwitchVault`), if `sync_obsidian_config` is tru
 | `:ObsidianCLIRefresh` | none | Refresh the optional obs-cli capability cache asynchronously |
 | `:ObsidianMove [target]` | optional | Preview a dry-run and safely move the current note after confirmation; requires `note.get` / `note.move` |
 | `:ObsidianVaultAudit` | none | Open a readonly Vault JSON snapshot; requires `note.list` |
-| `:[range]ObsidianAgentAnalyze [intent]` | optional | Bounded readonly analysis; requires `agent.handler` and `obs-cli note.get` |
-| `:[range]ObsidianAgentUpdate [intent]` | optional | Path-limited update; requires a saved buffer, `agent.handler`, and `note.get` / `note.patch` |
+| `:[range]ObsidianAgentAnalyze [intent]` | optional | Bounded readonly analysis; prompts when intent is omitted; requires `agent.handler` and `obs-cli note.get` |
+| `:[range]ObsidianAgentUpdate [intent]` | optional | Path-limited update; prompts when intent is omitted; requires a saved buffer, `agent.handler`, and `note.get` / `note.patch` |
 | `:ObsidianAgentLastResult` | none | Reopen the latest Agent result changed-files and recovery summary |
 | `:ObsidianSetup` | none | Initialize plugin with default config (rarely needed manually) |
 
@@ -451,7 +482,7 @@ require("miniobsidian").invalidate_cache()             -- Force-clear the note p
 
 ## Wiki link formats
 
-`<CR>` (`follow_link_or_toggle()`) handles all standard Obsidian wiki link formats:
+`<CR>` (`follow_link_or_toggle()`) handles the following Obsidian wiki link formats:
 
 | Format | Example | Notes |
 |--------|---------|-------|
@@ -530,6 +561,7 @@ The plugin fires Neovim `User` events so that other plugins or your config can r
 | `User MiniObsidianSetup` | `setup()` completes | none |
 | `User MiniObsidianVaultSwitch` | Vault is switched (cwd unchanged by default) | `{ name: string, path: string }` |
 | `User MiniObsidianNoteOpened` | Note creation or Daily Note open workflow completes | `{ path: string, opts: table }` |
+| `User MiniObsidianAgentHandoff` | An Agent handoff is dispatched successfully | `{ request_id: string, mode: string, path: string }` |
 
 ```lua
 -- Example: refresh neo-tree root after switching vaults
@@ -556,7 +588,8 @@ Both are optional and callback errors are contained by the plugin.
 require("miniobsidian").setup({
   after_note_open = function(path, opts)
     if opts.switch_root then
-      vim.cmd("tcd " .. vim.fn.fnameescape(vim.fn.fnamemodify(path, ":h")))
+      local vault = require("miniobsidian").config.vault_path
+      vim.cmd("tcd " .. vim.fn.fnameescape(vault))
     end
   end,
   on_vault_switch = function(_, path)

@@ -7,13 +7,15 @@
 --           本文件不设置任何按键映射，用户需自行在配置中绑定快捷键。
 -- 依赖关系：miniobsidian（init）、miniobsidian.note、miniobsidian.template、
 --           miniobsidian.image、miniobsidian.daily（均为延迟 require）
--- 对外 API：用户命令 ObsidianNew / ObsidianSwitch / ObsidianSearch /
---           ObsidianTemplate / ObsidianPasteImg / ObsidianToday /
---           ObsidianCLIRefresh / ObsidianMove / ObsidianVaultAudit /
---           ObsidianAgentAnalyze / ObsidianAgentUpdate / ObsidianAgentLastResult /
---           ObsidianSetup
+-- 对外 API：用户命令 ObsidianNew / ObsidianNewHere / ObsidianSwitchVault /
+--           ObsidianSwitch / ObsidianSearch / ObsidianTemplate /
+--           ObsidianNewTemplate / ObsidianPasteImg / ObsidianToday /
+--           ObsidianSetup / ObsidianResolveConflict / ObsidianCLIRefresh /
+--           ObsidianMove / ObsidianVaultAudit / ObsidianAgentAnalyze /
+--           ObsidianAgentUpdate / ObsidianAgentLastResult
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
+--             User MiniObsidianAgentHandoff（Agent handoff 成功分发后触发）
 -- ============================================================
 
 -- ── 防止重复加载 ───────────────────────────────────────────────

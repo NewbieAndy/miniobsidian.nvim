@@ -105,6 +105,9 @@ Vault 的同级客户端。
   })
 <
 
+若 dailies_folder 为空，Daily Note 会创建在 Vault 根目录。
+.obsidian/daily-notes.json 不存在或未配置 folder 时，也会使用这一默认行为。
+
 配置优先级：
 
   1. setup() 中显式设置的值
@@ -161,11 +164,12 @@ Windows ADS/保留设备名和经符号链接逃逸 Vault 的路径都会被拒�
     通过 obs-cli note.list 打开只读 Vault JSON 快照，不自动修改文件。
 
 :[range]ObsidianAgentAnalyze [意图]
-    构造有界只读 Agent handoff。需要 agent.handler 与 obs-cli note.get。
+    构造有界只读 Agent handoff。省略意图时弹出输入框。需要 agent.handler 与
+    obs-cli note.get。
 
 :[range]ObsidianAgentUpdate [意图]
-    仅授权当前笔记更新。需要已保存 buffer、agent.handler，以及 obs-cli
-    note.get 和 note.patch。
+    仅授权当前笔记更新。省略意图时弹出输入框。需要已保存 buffer、
+    agent.handler，以及 obs-cli note.get 和 note.patch。
 
 :ObsidianAgentLastResult
     重新打开最近一次 miniobsidian.agent-result/v1 摘要。
@@ -298,6 +302,10 @@ User MiniObsidianVaultSwitch
 User MiniObsidianNoteOpened
     笔记创建或 Daily Note 打开流程完成后触发。
     data = { path = string, opts = table }
+
+User MiniObsidianAgentHandoff
+    Agent handoff 成功分发后触发。
+    data = { request_id = string, mode = string, path = string }
 
 回调：
 

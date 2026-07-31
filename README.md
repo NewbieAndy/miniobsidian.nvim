@@ -55,7 +55,7 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
 | 🔍 **全文搜索** | 基于 ripgrep 的笔记全文搜索，附带实时预览；默认 `notes_subdir`，可配置为全 Vault |
 | 🔗 **Wiki 链接跳转** | `<CR>` 跳转 `[[链接]]`；支持别名、限定路径、heading 与 block ID；basename 重名时明确要求选择，不会静默打开错误笔记；找不到时可在目标目录创建 |
 | ✅ **Checkbox 状态循环** | 默认双态 `[ ]` ↔ `[x]`，可配置为 `[ ]` → `[/]` → `[x]` → `[-]` 等多状态；普通列表项可自动升级，`clear()` 可还原为普通列表项 |
-| 🔗 **Wiki 链接自动补全** | 输入 `[[` 时，blink.cmp 列出 vault 内所有笔记供模糊选择；同名笔记以 `父目录/名称` 区分；**悬停候选时显示笔记前 10 行预览** |
+| 🔗 **Wiki 链接自动补全** | 输入 `[[` 时，blink.cmp 列出 vault 内所有笔记供模糊选择；同名笔记通常显示为 `父目录/名称`，并插入完整 Vault 相对路径；**悬停候选时显示笔记前 10 行预览** |
 | ✅ **Checkbox 自动补全** | 输入 `- [`、`* [`、`+ [` 时，blink.cmp 弹出当前 `checkbox_states` 中配置的所有状态候选 |
 | 🖼️ **图片粘贴** | macOS 专用、内置 JXA；截图/浏览器图片保存为 PNG/JPG/GIF，Finder 复制的图片文件可保留 WEBP/HEIC/HEIF/TIFF/BMP/SVG 等原格式；插入可迁移的相对路径链接 |
 | 📄 **模板系统** | 从 `Templates/`（支持子目录）选择并插入模板；支持 6 个命名变量和 `{{date:FORMAT}}` 自定义日期；未知变量保留并警告 |
@@ -143,6 +143,13 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
   "andy-neoaira/miniobsidian.nvim",
   lazy = true,
   ft = "markdown",
+  cmd = {
+    "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault", "ObsidianSwitch",
+    "ObsidianSearch", "ObsidianTemplate", "ObsidianNewTemplate", "ObsidianPasteImg",
+    "ObsidianToday", "ObsidianSetup", "ObsidianResolveConflict", "ObsidianCLIRefresh",
+    "ObsidianMove", "ObsidianVaultAudit", "ObsidianAgentAnalyze",
+    "ObsidianAgentUpdate", "ObsidianAgentLastResult",
+  },
   config = function()
     require("miniobsidian").setup()
     -- 零配置启动：自动从 Obsidian 官方配置发现 vault，并同步 vault 内设置
@@ -152,12 +159,32 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
 
 ### lazy.nvim（完整配置，含 blink.cmp 自动补全）
 
+以下内容可直接保存为一个返回插件列表的 Lua 文件，例如 `lua/plugins/miniobsidian.lua`：
+
 ```lua
+return {
+-- quick switch / search 使用的 picker
+{
+  "folke/snacks.nvim",
+  priority = 1000,
+  lazy = false,
+  opts = {
+    picker = { enabled = true },
+  },
+},
+
 -- miniobsidian 主插件
 {
   "andy-neoaira/miniobsidian.nvim",
   lazy = true,
   ft = "markdown",
+  cmd = {
+    "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault", "ObsidianSwitch",
+    "ObsidianSearch", "ObsidianTemplate", "ObsidianNewTemplate", "ObsidianPasteImg",
+    "ObsidianToday", "ObsidianSetup", "ObsidianResolveConflict", "ObsidianCLIRefresh",
+    "ObsidianMove", "ObsidianVaultAudit", "ObsidianAgentAnalyze",
+    "ObsidianAgentUpdate", "ObsidianAgentLastResult",
+  },
   keys = {
     -- 全局快捷键（任意文件类型均可触发，lazy 加载时也会生效）
     { "<leader>nn", function() require("miniobsidian.note").new_note() end,         desc = "Obsidian: 新建笔记" },
@@ -190,7 +217,7 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
 -- 将 miniobsidian 注册为 blink.cmp 补全源
 {
   "saghen/blink.cmp",
-  optional = true,
+  version = "1.*", -- 固定稳定版；main 分支可能包含破坏性变更
   opts = function(_, opts)
     opts.sources = opts.sources or {}
     opts.sources.default = vim.list_extend(opts.sources.default or {}, { "miniobsidian" })
@@ -206,6 +233,7 @@ Wikilink、Daily Note、Frontmatter 与并发更新约定；规则见
     return opts
   end,
 },
+}
 ```
 
 ---
@@ -221,7 +249,9 @@ require("miniobsidian").setup({
   -- 留空时，若 auto_discover 为 true，插件会自动从 Obsidian 官方配置发现 vault
   vaults_parent = "",
 
-  -- 默认激活的 vault 名称（省略时取扫描到的第一个 vault，按字母序排列）
+  -- 默认激活的 vault 名称
+  -- 省略时：自动发现优先选择 Obsidian 标记为 open 的 vault；
+  -- 手动扫描 vaults_parent 时选择按名称排序后的第一个 vault
   default_vault = "",
 
   -- 当 vaults_parent 为空时，是否自动从 Obsidian 官方 obsidian.json 发现 vault
@@ -238,8 +268,9 @@ require("miniobsidian").setup({
   -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/app.json 的 newFileFolderPath
   notes_subdir = "Notes",
 
-  -- 每日笔记目录
+  -- 每日笔记目录；留空 "" 时直接创建在 Vault 根目录
   -- 若 sync_obsidian_config 为 true，会自动读取 .obsidian/daily-notes.json 的 folder
+  -- 该文件不存在或未配置 folder 时仍使用空字符串默认值
   dailies_folder = "",
 
   -- Daily Note 模板的 Vault 相对 Note ID；默认从 daily-notes.json 同步
@@ -348,8 +379,9 @@ require("miniobsidian").setup({
 - `:ObsidianVaultAudit` 通过只读 `note.list` 打开当前 Vault 的 JSON 快照，作为后续
   审计/批量操作的只读入口，不会自动 apply。
 - Agent handoff 通过用户配置的 `agent.handler(payload)` 适配任意 Agent 框架，
-  不启动 shell。Payload 固定为 `miniobsidian.agent-handoff/v1`，只包含 Vault ID、
-  当前笔记相对路径/revision、显式意图和可选内存选区；默认禁止全 Vault 扫描。
+  不启动 shell。Payload 固定为 `miniobsidian.agent-handoff/v1`，包含请求元数据、
+  Vault ID、当前笔记相对路径/revision、显式意图、权限边界和可选内存选区；
+  默认禁止全 Vault 扫描。
 - `:ObsidianAgentAnalyze` 使用只读权限与 `obsidian-knowledge-synthesis` Skill；
   dirty buffer 只允许经确认的内存只读分析。`:ObsidianAgentUpdate` 要求先保存
   buffer，并只授权当前路径给 `obsidian-safe-note-update`。当前内置 handoff
@@ -379,8 +411,8 @@ require("miniobsidian").setup({
 | `:ObsidianCLIRefresh` | 无 | 异步刷新可选 obs-cli capability 缓存 |
 | `:ObsidianMove [目标路径]` | 可选 | dry-run 预览并确认后安全移动当前笔记；需要 `note.get` / `note.move` |
 | `:ObsidianVaultAudit` | 无 | 打开只读 Vault JSON 快照；需要 `note.list` |
-| `:[range]ObsidianAgentAnalyze [意图]` | 可选 | 有界只读分析；需要 `agent.handler` 与 `obs-cli note.get` |
-| `:[range]ObsidianAgentUpdate [意图]` | 可选 | 当前路径内安全更新；需要已保存 buffer、`agent.handler`、`note.get` / `note.patch` |
+| `:[range]ObsidianAgentAnalyze [意图]` | 可选 | 有界只读分析；省略意图时弹出输入框；需要 `agent.handler` 与 `obs-cli note.get` |
+| `:[range]ObsidianAgentUpdate [意图]` | 可选 | 当前路径内安全更新；省略意图时弹出输入框；需要已保存 buffer、`agent.handler`、`note.get` / `note.patch` |
 | `:ObsidianAgentLastResult` | 无 | 重新打开最近一次 Agent result 的 changed files 与恢复摘要 |
 | `:ObsidianSetup` | 无 | 使用默认配置初始化插件（通常不需要手动调用） |
 
@@ -440,7 +472,7 @@ require("miniobsidian").invalidate_cache()             -- 主动清空笔记路�
 
 ## Wiki 链接格式
 
-`<CR>`（`follow_link_or_toggle()`）支持以下所有 Obsidian Wiki 链接格式：
+`<CR>`（`follow_link_or_toggle()`）支持以下 Obsidian Wiki 链接格式：
 
 | 格式 | 示例 | 说明 |
 |------|------|------|
@@ -519,6 +551,7 @@ require("lualine").setup({
 | `User MiniObsidianSetup` | `setup()` 完成后 | 无 |
 | `User MiniObsidianVaultSwitch` | 切换 vault 后（默认不修改 cwd） | `{ name: string, path: string }` |
 | `User MiniObsidianNoteOpened` | 笔记创建或 Daily Note 打开完成后 | `{ path: string, opts: table }` |
+| `User MiniObsidianAgentHandoff` | Agent handoff 成功分发后 | `{ request_id: string, mode: string, path: string }` |
 
 ```lua
 -- 示例：vault 切换后刷新 neo-tree 根目录
@@ -557,8 +590,8 @@ require("miniobsidian").setup({
   after_note_open = function(path, opts)
     if opts and opts.switch_root then
       local vault_path = require("miniobsidian").config.vault_path
-      -- 切换 Neovim 工作目录到 vault 根
-      pcall(vim.api.nvim_set_current_dir, vault_path)
+      -- 只切换当前 tab 的工作目录，不影响其他 tab
+      pcall(vim.cmd, "tcd " .. vim.fn.fnameescape(vault_path))
       -- 刷新 snacks explorer（示例；换成你使用的文件树刷新逻辑）
       vim.notify("已切换根目录: " .. vault_path)
     end
@@ -594,29 +627,23 @@ require("miniobsidian").setup({
 
 ### 为 picker 流添加 BufEnter 回调
 
-`quick_switch()` 和 `search()` 使用 snacks.nvim picker 异步选择文件，插件内部不知道文件何时最终打开。若需要在这两个流程后也触发根目录切换，在调用前注册一次性 `BufEnter` 事件即可：
+`quick_switch()` 和 `search()` 使用 snacks.nvim picker 异步选择文件，插件内部不知道文件何时最终打开。若希望打开任意 Vault 笔记时都切换当前 tab 的工作目录，可注册一个长期、Vault 范围受限的 `BufEnter`：
 
 ```lua
--- 示例：自定义带根目录切换的快速切换键映射
-vim.keymap.set("n", "<leader>nO", function()
-  local core = require("miniobsidian")
-  -- 注册一次性 BufEnter：picker 选中文件打开后触发
-  vim.api.nvim_create_autocmd("BufEnter", {
-    pattern  = "*.md",
-    once     = true,
-    callback = function(ev)
-      if core.in_vault(ev.file) then
-        -- 执行你的副作用（如切换根目录、刷新文件树等）
-        local vault_path = core.config.vault_path
-        pcall(vim.api.nvim_set_current_dir, vault_path)
-      end
-    end,
-  })
-  require("miniobsidian.note").quick_switch()
-end, { desc = "Obsidian: 快速切换（切换根目录）" })
+local group = vim.api.nvim_create_augroup("miniobsidian_picker_cwd", { clear = true })
+vim.api.nvim_create_autocmd("BufEnter", {
+  group = group,
+  pattern = "*.md",
+  callback = function(ev)
+    local core = require("miniobsidian")
+    if core.in_vault(ev.file) then
+      pcall(vim.cmd, "tcd " .. vim.fn.fnameescape(core.config.vault_path))
+    end
+  end,
+})
 ```
 
-> **提示：** `once = true` 确保此 autocmd 只触发一次，不会残留影响后续普通 Markdown 文件的打开。
+该回调只处理当前活跃 Vault 内的 Markdown 文件；取消 picker 不会留下等待触发的一次性 autocmd。
 
 ---
 
