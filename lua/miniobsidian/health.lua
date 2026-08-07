@@ -144,14 +144,6 @@ function M.check()
   for _, item in ipairs(M.vault_status(core)) do
     h[item.level](item.message)
   end
-
-  local cli_ok, cli = pcall(require, "miniobsidian.cli")
-  if cli_ok then
-    local item = cli.health_status()
-    h[item.level](item.message)
-  else
-    h.info("obs-cli integration unavailable (optional)")
-  end
 end
 
 return M

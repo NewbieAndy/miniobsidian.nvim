@@ -29,6 +29,17 @@ describe("template", function()
     assert.equals(0, vim.fn.filereadable(path))
   end)
 
+  it("opens an existing template without replacing its content", function()
+    local path = vault .. "/Templates/Existing.md"
+    vim.fn.mkdir(vault .. "/Templates", "p")
+    vim.fn.writefile({ "keep me" }, path)
+    require("miniobsidian.template").new_template("Existing")
+    vim.wait(1000, function()
+      return vim.api.nvim_buf_get_name(0) == path
+    end)
+    assert.same({ "keep me" }, vim.fn.readfile(path))
+  end)
+
   it("renders common variables case-insensitively and keeps unknown variables", function()
     local timestamp = os.time({ year = 2026, month = 7, day = 24, hour = 9, min = 30, sec = 0 })
     local content, warnings = require("miniobsidian.template").render(

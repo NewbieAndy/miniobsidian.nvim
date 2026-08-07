@@ -1,3 +1,0 @@
-# Status
-
-Changed from Obsidian.

@@ -36,8 +36,8 @@ describe("wikilink", function()
     assert.equals("Projects/Alpha/Index", exact.id)
   end)
 
-  it("matches the shared duplicate-note contract fixture", function()
-    local root = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/vault-contract/v1/duplicate-note-names"
+  it("matches the pinned duplicate-note fixture", function()
+    local root = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/duplicate-note-names"
     local notes = vim.fn.globpath(root, "**/*.md", false, true)
     local _, err = wikilink.resolve(assert(wikilink.parse("[[Index]]")), notes, root)
     assert.equals("AMBIGUOUS_NOTE", err.code)
@@ -48,10 +48,10 @@ describe("wikilink", function()
 
   it("locates headings, duplicate anchors, and exact block ids", function()
     local note = vault .. "/Notes/Fragments.md"
-    vim.fn.writefile({ "# Intro", "text", "# Intro", "block ^agent-id" }, note)
+    vim.fn.writefile({ "# Intro", "text", "# Intro", "block ^block-id" }, note)
     assert.equals(1, wikilink.locate_fragment(note, assert(wikilink.parse("[[Fragments#Intro]]"))))
     assert.equals(3, wikilink.locate_fragment(note, assert(wikilink.parse("[[Fragments#Intro-1]]"))))
-    assert.equals(4, wikilink.locate_fragment(note, assert(wikilink.parse("[[Fragments#^agent-id]]"))))
+    assert.equals(4, wikilink.locate_fragment(note, assert(wikilink.parse("[[Fragments#^block-id]]"))))
   end)
 
   it("prompts for disambiguation instead of opening the first duplicate", function()

@@ -101,15 +101,12 @@ function M.open_today(opts)
   end
 
   vim.fn.mkdir(vim.fn.fnamemodify(plan.path, ":h"), "p")
-  local is_new = not plan.exists and vim.fn.filereadable(plan.path) == 0
+  local is_new, create_err = require("miniobsidian.fs").create_exclusive(plan.path, plan.content)
+  if is_new == nil then
+    core.notify("创建每日笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
+    return
+  end
   if is_new then
-    local file, open_err = io.open(plan.path, "w")
-    if not file then
-      core.notify("创建每日笔记失败: " .. tostring(open_err), vim.log.levels.ERROR)
-      return
-    end
-    file:write(plan.content)
-    file:close()
     core.invalidate_cache()
     for _, warning in ipairs(plan.warnings) do
       core.notify(warning, vim.log.levels.WARN)

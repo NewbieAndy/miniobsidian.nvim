@@ -25,14 +25,8 @@ local M = {}
 ---@field templates_folder string 模板文件所在目录（相对当前活跃 vault）
 ---@field attachments_folder string 图片等附件目录（相对当前活跃 vault）
 ---@field daily_date_format string os.date 格式字符串，用于每日笔记文件名及 frontmatter 日期
----@field external_change_mode "prompt"|"reload"|"notify" 未修改 buffer 的外部变更处理策略
----@field external_check_interval_ms number checktime 最小间隔
----@field external_watch_debounce_ms number 文件系统事件防抖间隔
----@field watch_external_changes boolean 是否监听 Vault 目录变化以失效缓存
 ---@field change_cwd_on_switch boolean 切换 Vault 时是否设置当前 tab 的 cwd（默认 false）
 ---@field picker_scope "notes"|"vault" quick switch/search 的范围
----@field cli {enabled: boolean|"auto", command: string, timeout_ms: number} 可选 obs-cli adapter 配置
----@field agent {handler: function|nil, confirm_content: boolean, large_selection_lines: number} Agent handoff 配置
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
@@ -58,22 +52,8 @@ local function new_default_config()
     templates_folder = "Templates",
     attachments_folder = "Assets",
     daily_date_format = "%Y-%m-%d",
-    external_change_mode = "prompt",
-    external_check_interval_ms = 1000,
-    external_watch_debounce_ms = 100,
-    watch_external_changes = true,
     change_cwd_on_switch = false,
     picker_scope = "notes",
-    cli = {
-      enabled = "auto",
-      command = "obs-cli",
-      timeout_ms = 3000,
-    },
-    agent = {
-      handler = nil,
-      confirm_content = true,
-      large_selection_lines = 200,
-    },
 
     --- Checkbox 循环切换状态列表（按顺序循环）。
     -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
@@ -136,40 +116,7 @@ function M.validate_config(config)
   add(type(config.auto_discover) == "boolean", "auto_discover 必须是 boolean")
   add(type(config.sync_obsidian_config) == "boolean", "sync_obsidian_config 必须是 boolean")
   add(type(config.change_cwd_on_switch) == "boolean", "change_cwd_on_switch 必须是 boolean")
-  add(type(config.watch_external_changes) == "boolean", "watch_external_changes 必须是 boolean")
-  add(type(config.cli) == "table", "cli 必须是 table")
-  if type(config.cli) == "table" then
-    add(
-      config.cli.enabled == false or config.cli.enabled == true or config.cli.enabled == "auto",
-      "cli.enabled 必须是 false、auto 或 true"
-    )
-    add(type(config.cli.command) == "string" and config.cli.command ~= "", "cli.command 必须是非空字符串")
-    add(type(config.cli.timeout_ms) == "number" and config.cli.timeout_ms > 0, "cli.timeout_ms 必须是正数")
-  end
-  add(type(config.agent) == "table", "agent 必须是 table")
-  if type(config.agent) == "table" then
-    add(config.agent.handler == nil or type(config.agent.handler) == "function", "agent.handler 必须是函数或 nil")
-    add(type(config.agent.confirm_content) == "boolean", "agent.confirm_content 必须是 boolean")
-    add(
-      type(config.agent.large_selection_lines) == "number" and config.agent.large_selection_lines > 0,
-      "agent.large_selection_lines 必须是正数"
-    )
-  end
   add(config.picker_scope == "notes" or config.picker_scope == "vault", "picker_scope 必须是 notes 或 vault")
-  add(
-    config.external_change_mode == "prompt"
-      or config.external_change_mode == "reload"
-      or config.external_change_mode == "notify",
-    "external_change_mode 必须是 prompt、reload 或 notify"
-  )
-  add(
-    type(config.external_check_interval_ms) == "number" and config.external_check_interval_ms >= 0,
-    "external_check_interval_ms 必须是非负数"
-  )
-  add(
-    type(config.external_watch_debounce_ms) == "number" and config.external_watch_debounce_ms >= 0,
-    "external_watch_debounce_ms 必须是非负数"
-  )
   add(type(config.daily_date_format) == "string" and config.daily_date_format ~= "", "daily_date_format 不能为空")
   add(type(config.note_id_func) == "function", "note_id_func 必须是函数")
   add(type(config.checkbox_states) == "table" and #config.checkbox_states > 0, "checkbox_states 不能为空")
@@ -423,12 +370,6 @@ function M.setup(opts)
   -- 触发自定义 User 事件，通知 plugin/miniobsidian.lua 注册后续 autocmd。
   vim.api.nvim_exec_autocmds("User", { pattern = "MiniObsidianSetup" })
 
-  -- CLI adapter 是可选能力。setup 只做 executable 同步检查并异步读取 capabilities，
-  -- 失败不会改变本地 Vault 功能或 setup 的返回值。
-  local cli_ok, cli = pcall(require, "miniobsidian.cli")
-  if cli_ok then
-    cli.setup(M.config.cli)
-  end
   return true
 end
 

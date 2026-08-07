@@ -57,25 +57,15 @@ describe("miniobsidian init", function()
     assert.equals("Notes", core.config.notes_subdir)
     assert.equals("notes", core.config.picker_scope)
     assert.is_false(core.config.change_cwd_on_switch)
-    assert.equals("auto", core.config.cli.enabled)
-    assert.equals("obs-cli", core.config.cli.command)
-    assert.is_nil(core.config.agent.handler)
-    assert.is_true(core.config.agent.confirm_content)
-    assert.equals(200, core.config.agent.large_selection_lines)
     helpers.cleanup(parent)
   end)
 
-  it("rejects invalid enum, interval, and Vault-relative path settings", function()
+  it("rejects invalid enum and Vault-relative path settings", function()
     local core = require("miniobsidian")
     local config = core.default_config()
     config.picker_scope = "somewhere"
-    config.external_check_interval_ms = -1
     config.notes_subdir = "../outside"
-    config.cli.enabled = "sometimes"
-    config.agent.handler = "shell command"
-    config.agent.confirm_content = "yes"
-    config.agent.large_selection_lines = 0
     local errors = core.validate_config(config)
-    assert.equals(7, #errors)
+    assert.equals(2, #errors)
   end)
 end)

@@ -1,7 +1,7 @@
 NVIM ?= nvim
 PLENARY_DIR ?= $(HOME)/.local/share/nvim/lazy/plenary.nvim
 
-.PHONY: test format-check lint fixture-check ci
+.PHONY: test format-check lint ci
 
 test:
 	MINIOBSIDIAN_ROOT=$(CURDIR) PLENARY_DIR=$(PLENARY_DIR) \
@@ -15,7 +15,4 @@ format-check:
 lint:
 	selene lua
 
-fixture-check:
-	./scripts/check-fixtures.sh
-
-ci: format-check lint fixture-check test
+ci: format-check lint test

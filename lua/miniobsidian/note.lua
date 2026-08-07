@@ -290,22 +290,12 @@ function M._create_note(title, dir, opts)
     "",
   }, "\n")
 
-  local is_new = vim.fn.filereadable(path) == 0
+  local is_new, create_err = require("miniobsidian.fs").create_exclusive(path, frontmatter)
+  if is_new == nil then
+    vim.notify("[miniobsidian] 创建笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
+    return
+  end
   if is_new then
-    local ok, err = pcall(function()
-      local f = io.open(path, "w")
-      if not f then
-        error("无法创建文件: " .. path)
-      end
-      f:write(frontmatter)
-      f:close()
-    end)
-
-    if not ok then
-      vim.notify("[miniobsidian] 创建笔记失败: " .. tostring(err), vim.log.levels.ERROR)
-      return
-    end
-
     core.invalidate_cache()
   end
 

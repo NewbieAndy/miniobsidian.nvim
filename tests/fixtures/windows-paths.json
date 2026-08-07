@@ -1,0 +1,10 @@
+{
+  "inputs": [
+    { "path": "C:\\Windows\\System32\\note.md", "valid": false },
+    { "path": "\\\\server\\share\\note.md", "valid": false },
+    { "path": "Notes/CON.md", "valid": false },
+    { "path": "Notes/name:stream.md", "valid": false },
+    { "path": "Notes/trailing. ", "valid": false },
+    { "path": "Notes/Valid Name.md", "valid": true }
+  ]
+}

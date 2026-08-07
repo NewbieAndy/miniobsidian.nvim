@@ -1,78 +1,32 @@
-*miniobsidian-zh.txt*                    miniobsidian.nvim 中文帮助
+*miniobsidian.zh.txt*        miniobsidian.nvim 中文帮助
 
-==============================================================================
-目录                                                        *miniobsidian-zh*
+===============================================================================
+目录                                                     *miniobsidian-zh*
 
-1. 简介                                      |miniobsidian-zh-introduction|
-2. 依赖                                      |miniobsidian-zh-requirements|
-3. 配置                                      |miniobsidian-zh-setup|
-4. 命令                                      |miniobsidian-zh-commands|
-5. Wikilink                                  |miniobsidian-zh-wikilinks|
-6. 外部修改与冲突                            |miniobsidian-zh-external-changes|
-7. obs-cli 与 Agent                          |miniobsidian-zh-agent|
-8. Lua API                                   |miniobsidian-zh-api|
-9. 自定义事件                                |miniobsidian-zh-events|
-10. 健康检查                                 |miniobsidian-zh-health|
+1. 简介                                         |miniobsidian-zh-introduction|
+2. 配置                                                |miniobsidian-zh-setup|
+3. 命令                                             |miniobsidian-zh-commands|
+4. Lua API                                               |miniobsidian-zh-api|
+5. 事件                                               |miniobsidian-zh-events|
 
-==============================================================================
-简介                                           *miniobsidian-zh-introduction*
+===============================================================================
+1. 简介                                         *miniobsidian-zh-introduction*
 
-miniobsidian.nvim 是一个轻量的 Obsidian 工作流 Neovim 插件。Markdown Vault
-是唯一内容事实源；Obsidian、miniobsidian.nvim 和可选的 obs-cli 是操作同一个
-Vault 的同级客户端。
+miniobsidian.nvim 是独立的轻量 Neovim 笔记插件，提供 Vault 发现、笔记创建、
+搜索、Wikilink、模板、Daily Note、Checkbox 和图片粘贴。
 
-主要能力：
+插件不集成外部 CLI 或 Agent，也不协调其他应用的并发写入。外部文件变化沿用
+Neovim 原生行为。插件自身的新建操作使用 no-replace 语义，不会截断已有文件。
 
-  - 从父目录或 Obsidian 官方配置自动发现多个 Vault
-  - 创建笔记、Daily Note、模板和附件
-  - 快速切换与 ripgrep 全文搜索
-  - Wikilink 跳转、重名消歧、heading/block 定位和补全
-  - Checkbox 状态循环
-  - 外部修改检测、diff 和 SHA-256 写入保护
-  - 可选 obs-cli 安全移动、Vault 审计与 Agent handoff
+===============================================================================
+2. 配置                                                *miniobsidian-zh-setup*
 
-插件不设置默认快捷键。用户可按需调用命令或 Lua API。
-
-==============================================================================
-依赖                                             *miniobsidian-zh-requirements*
-
-必需：
-
-  - Neovim >= 0.10.4
-
-按功能可选：
-
-  - snacks.nvim
-      :ObsidianSwitch 与 :ObsidianSearch 必需；模板和 Vault 选择在缺失时
-      回退到 vim.ui.select。
-  - ripgrep (rg)
-      仅全文搜索需要。
-  - blink.cmp
-      Wikilink 和 Checkbox 自动补全。
-  - osascript
-      macOS 图片粘贴，系统自带。
-  - obs-cli，兼容 obs-cli/v1 与 vault-contract/v1
-      安全移动、Vault 审计和内置 Agent handoff。
-
-==============================================================================
-配置                                                   *miniobsidian-zh-setup*
-
-最小配置：
->
-  require("miniobsidian").setup()
-<
-
-默认会从 Obsidian 官方 obsidian.json 自动发现 Vault，并同步当前 Vault 的
-.obsidian/app.json 与 .obsidian/daily-notes.json。
-
-常用完整配置：
->
+>lua
   require("miniobsidian").setup({
     vaults_parent = "",
     default_vault = "",
     auto_discover = true,
     sync_obsidian_config = true,
-
     notes_subdir = "Notes",
     dailies_folder = "",
     daily_template = "",
@@ -80,256 +34,75 @@ Vault 的同级客户端。
     templates_folder = "Templates",
     attachments_folder = "Assets",
     daily_date_format = "%Y-%m-%d",
-
-    picker_scope = "notes",          -- "notes" 或 "vault"
-    change_cwd_on_switch = false,    -- true 时只执行 tab-local :tcd
-
-    external_change_mode = "prompt", -- "prompt"、"reload" 或 "notify"
-    external_check_interval_ms = 1000,
-    external_watch_debounce_ms = 100,
-    watch_external_changes = true,
-
-    cli = {
-      enabled = "auto",              -- false、"auto" 或 true
-      command = "obs-cli",
-      timeout_ms = 3000,
-    },
-
-    agent = {
-      handler = nil,                 -- function(payload) ... end
-      confirm_content = true,
-      large_selection_lines = 200,
-    },
-
+    picker_scope = "notes",
+    change_cwd_on_switch = false,
     checkbox_states = { " ", "x" },
+    on_vault_switch = nil,
+    after_note_open = nil,
   })
 <
 
-若 dailies_folder 为空，Daily Note 会创建在 Vault 根目录。
-.obsidian/daily-notes.json 不存在或未配置 folder 时，也会使用这一默认行为。
+用户显式配置优先于 .obsidian/app.json 和 .obsidian/daily-notes.json。
 
-配置优先级：
-
-  1. setup() 中显式设置的值
-  2. 从 Obsidian 配置同步的值
-  3. 插件默认值
-
-所有内容目录必须是安全的 Vault 相对路径。绝对路径、".."、隐藏目录、
-Windows ADS/保留设备名和经符号链接逃逸 Vault 的路径都会被拒绝。
-
-==============================================================================
-命令                                                *miniobsidian-zh-commands*
+===============================================================================
+3. 命令                                             *miniobsidian-zh-commands*
 
 :ObsidianNew[!] [标题]
-    在 notes_subdir 创建笔记。省略标题时弹出输入框。! 会向
-    after_note_open 传入 switch_root=true。
+    在 notes_subdir 创建或打开笔记。
 
 :ObsidianNewHere
-    在当前文件浏览器光标所在目录创建笔记。支持 snacks explorer、neo-tree、
-    nvim-tree、oil.nvim 和 netrw。目标必须位于当前 Vault。
+    在支持的文件树当前目录创建笔记。
 
 :ObsidianSwitchVault
-    选择并切换 Vault。默认不修改 cwd。
+    选择活跃 Vault。
 
 :ObsidianSwitch
-    使用 snacks.nvim 快速选择 Markdown 笔记。
+    打开笔记选择器。
 
 :ObsidianSearch [关键词]
-    使用 snacks.nvim + ripgrep 全文搜索。
+    使用 snacks.nvim 和 ripgrep 搜索 Markdown 内容。
 
 :ObsidianTemplate
-    从 templates_folder 递归选择模板并插入。
+    选择并插入模板。
 
 :ObsidianNewTemplate [名称]
-    创建模板；已存在时只打开，不覆盖。
+    创建或打开模板，不覆盖已有文件。
 
 :ObsidianPasteImg [名称]
-    在 macOS 保存剪贴板图片到 attachments_folder，并插入相对路径链接。
+    在 macOS 粘贴剪贴板图片。
 
 :ObsidianToday[!]
-    打开或创建今日 Daily Note。已有文件不会覆盖。! 会向 after_note_open
-    传入 switch_root=true。
-
-:ObsidianResolveConflict
-    重新打开当前笔记的外部修改处理：查看 diff、保留 buffer 或重新加载磁盘。
-
-:ObsidianCLIRefresh
-    异步刷新 obs-cli capability 状态。
-
-:ObsidianMove [目标]
-    读取 revision，预览 note.move dry-run，确认后携带 revision + plan_hash
-    执行移动。需要 obs-cli note.get 和 note.move；dirty buffer 会被拒绝。
-
-:ObsidianVaultAudit
-    通过 obs-cli note.list 打开只读 Vault JSON 快照，不自动修改文件。
-
-:[range]ObsidianAgentAnalyze [意图]
-    构造有界只读 Agent handoff。省略意图时弹出输入框。需要 agent.handler 与
-    obs-cli note.get。
-
-:[range]ObsidianAgentUpdate [意图]
-    仅授权当前笔记更新。省略意图时弹出输入框。需要已保存 buffer、
-    agent.handler，以及 obs-cli note.get 和 note.patch。
-
-:ObsidianAgentLastResult
-    重新打开最近一次 miniobsidian.agent-result/v1 摘要。
+    打开或安全创建今日笔记。
 
 :ObsidianSetup
-    使用默认配置初始化；通常只用于测试或不使用插件管理器的场景。
+    使用默认配置初始化插件。
 
-==============================================================================
-Wikilink                                         *miniobsidian-zh-wikilinks*
+===============================================================================
+4. LUA API                                               *miniobsidian-zh-api*
 
-支持：
-
-  [[Note]]
-  [[Note|别名]]
-  [[Folder/Note]]
-  [[Note#Heading]]
-  [[Note#^block-id]]
-
-解析规则：
-
-  - 包含目录的目标按完整 Vault 相对 Note ID 匹配，然后尝试忽略大小写。
-  - 裸目标按 basename 匹配；多个同名笔记必须显式选择。
-  - heading 会定位到匹配标题；重复标题支持 "-1"、"-2" 锚点。
-  - block ID 必须精确匹配行尾的 ^block-id。
-  - 不存在的目标可确认创建；限定路径会保留目标目录。
-
-补全只在当前 Vault 内的 Markdown buffer 启用：
-
-  [[
-      列出笔记；同名笔记插入限定路径；悬停异步预览前 10 行。
-
-  - [、* [、+ [
-      列出 checkbox_states 中配置的状态。
-
-==============================================================================
-外部修改与冲突                           *miniobsidian-zh-external-changes*
-
-插件在 FocusGained / BufEnter 上节流执行原生 checktime，并接管 Vault 内
-Markdown buffer 的 FileChangedShell。
-
-external_change_mode：
-
-  "prompt"
-      默认。保留内存内容，提供 diff / 保留 / 重新加载。
-  "reload"
-      只自动重载 clean buffer；dirty buffer 仍进入冲突流程。
-  "notify"
-      保留 buffer 并通知。
-
-每个已加载 Markdown buffer 都会记录磁盘内容 SHA-256 基线。BufWritePre 会
-同步复核，因此即使窗口一直保持焦点、checktime 尚未执行，只要磁盘内容变化，
-普通 :write 也会被阻止。
-
-"保留 buffer" 不代表允许覆盖磁盘；冲突解除前写入继续被阻止。需要先查看
-diff、手动合并，或明确重新加载磁盘版本。
-
-==============================================================================
-obs-cli 与 Agent                                  *miniobsidian-zh-agent*
-
-obs-cli 是可选高级能力，不影响创建笔记、Wikilink、模板、Daily Note 等本地
-功能。cli.enabled：
-
-  false
-      完全禁用。
-  "auto"
-      默认。可执行文件存在时探测；失败仅作为可选信息。
-  true
-      明确期望启用；失败会在 :checkhealth 中告警。
-
-只有状态为 "ready" 且 operation 已声明时才可调用高级操作：
->
-  require("miniobsidian.cli").state()
-  require("miniobsidian.cli").available("note.move")
-<
-
-Agent handoff 不会自行启动 Agent。用户必须配置 agent.handler(payload)，将
-miniobsidian.agent-handoff/v1 发送给自己的 Agent 框架。
-
-Agent 完成后，集成层调用：
->
-  require("miniobsidian.agent_result").handle(result)
-<
-
-agent_result 只验收和展示结果，不执行 Agent 修改。它会校验 request_id 和
-result schema，显示 changed files/revision/恢复步骤；clean buffer 显示 unified
-diff，dirty buffer 显示 base / Agent disk / local 三方视图，并阻止陈旧写入。
-
-==============================================================================
-Lua API                                                *miniobsidian-zh-api*
-
-核心：
->
-  require("miniobsidian").setup(opts)
-  require("miniobsidian").get_all_notes(force?)
-  require("miniobsidian").invalidate_cache()
-  require("miniobsidian").in_vault(path)
-  require("miniobsidian").active_vault_name
-<
-
-常用工作流：
->
-  require("miniobsidian.note").new_note(title?)
+>lua
+  require("miniobsidian.note").new_note(title?, opts?)
   require("miniobsidian.note").new_note_here()
   require("miniobsidian.note").quick_switch()
   require("miniobsidian.note").search(query?)
-  require("miniobsidian.daily").open_today()
+  require("miniobsidian.daily").open_today(opts?)
   require("miniobsidian.template").insert()
-  require("miniobsidian.checkbox").toggle()
+  require("miniobsidian.template").new_template(name?)
   require("miniobsidian.vault").pick_and_switch()
+  require("miniobsidian.link").follow_link_or_toggle()
+  require("miniobsidian.checkbox").toggle()
 <
 
-可选高级工作流：
->
-  require("miniobsidian.move").move_current(target?)
-  require("miniobsidian.move").audit()
-  require("miniobsidian.handoff").handoff(mode, intent?, command_opts?)
-  require("miniobsidian.agent_result").handle(result)
-<
+===============================================================================
+5. 事件                                               *miniobsidian-zh-events*
 
-==============================================================================
-自定义事件                                          *miniobsidian-zh-events*
+MiniObsidianSetup
+    setup 完成后触发。
 
-User MiniObsidianSetup
-    setup() 完成后触发，无 data。
+MiniObsidianVaultSwitch
+    切换 Vault 后触发。data = { name, path }。
 
-User MiniObsidianVaultSwitch
-    切换 Vault 后触发。
-    data = { name = string, path = string }
+MiniObsidianNoteOpened
+    打开笔记后触发。data = { path, opts }。
 
-User MiniObsidianNoteOpened
-    笔记创建或 Daily Note 打开流程完成后触发。
-    data = { path = string, opts = table }
-
-User MiniObsidianAgentHandoff
-    Agent handoff 成功分发后触发。
-    data = { request_id = string, mode = string, path = string }
-
-回调：
-
-  after_note_open(path, opts)
-      note/daily 工作流打开笔记后调用。
-
-  on_vault_switch(name, path)
-      切换 Vault 后调用。
-
-==============================================================================
-健康检查                                            *miniobsidian-zh-health*
-
-执行：
->
-  :checkhealth miniobsidian
-<
-
-检查内容包括 Neovim 版本、snacks.nvim、ripgrep、blink.cmp、macOS osascript、
-配置合法性、Vault 发现状态和 obs-cli capability 状态。
-
-英文帮助：
->
-  :help miniobsidian
-<
-
-==============================================================================
-vim:tw=78:ts=8:ft=help:norl:
+vim:tw=78:ts=8:noet:ft=help:norl:

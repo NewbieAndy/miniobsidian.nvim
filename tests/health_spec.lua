@@ -29,18 +29,4 @@ describe("health", function()
     local status = require("miniobsidian.health").vault_status(core)
     assert.equals("error", status[1].level)
   end)
-
-  it("treats a missing auto-mode CLI as optional information", function()
-    local core = require("miniobsidian")
-    core.config.cli = {
-      enabled = "auto",
-      command = "miniobsidian-cli-that-does-not-exist",
-      timeout_ms = 20,
-    }
-    local cli = require("miniobsidian.cli")
-    cli.setup(core.config.cli)
-    local status = cli.health_status()
-    assert.equals("info", status.level)
-    assert.truthy(status.message:find("optional", 1, true))
-  end)
 end)

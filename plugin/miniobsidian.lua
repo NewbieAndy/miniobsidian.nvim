@@ -10,12 +10,9 @@
 -- 对外 API：用户命令 ObsidianNew / ObsidianNewHere / ObsidianSwitchVault /
 --           ObsidianSwitch / ObsidianSearch / ObsidianTemplate /
 --           ObsidianNewTemplate / ObsidianPasteImg / ObsidianToday /
---           ObsidianSetup / ObsidianResolveConflict / ObsidianCLIRefresh /
---           ObsidianMove / ObsidianVaultAudit / ObsidianAgentAnalyze /
---           ObsidianAgentUpdate / ObsidianAgentLastResult
+--           ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
---             User MiniObsidianAgentHandoff（Agent handoff 成功分发后触发）
 -- ============================================================
 
 -- ── 防止重复加载 ───────────────────────────────────────────────
@@ -134,59 +131,6 @@ vim.api.nvim_create_user_command("ObsidianSetup", function()
   require("miniobsidian").setup()
 end, { desc = "初始化 miniobsidian（使用默认配置）" })
 
-vim.api.nvim_create_user_command("ObsidianResolveConflict", function()
-  require("miniobsidian.external_changes").prompt(vim.api.nvim_get_current_buf(), true)
-end, { desc = "处理当前笔记的外部修改冲突" })
-
---- :ObsidianCLIRefresh
--- 异步刷新可选 obs-cli capability 缓存；不会阻塞 UI，也不会影响本地笔记功能。
-vim.api.nvim_create_user_command("ObsidianCLIRefresh", function()
-  require("miniobsidian.cli").refresh(function(state)
-    require("miniobsidian").notify(("obs-cli status: %s"):format(state.status))
-  end)
-end, { desc = "刷新可选 obs-cli capability 缓存" })
-
---- :ObsidianMove [target]
--- 使用 obs-cli 的事务化 note.move：先 dry-run 并预览计划，确认后携带 revision
--- 与 plan_hash 执行 apply。CLI 不可用或 capability 不满足时返回稳定错误。
-vim.api.nvim_create_user_command("ObsidianMove", function(opts)
-  require("miniobsidian.move").move_current(opts.args ~= "" and opts.args or nil)
-end, {
-  nargs = "?",
-  complete = "file",
-  desc = "预览并安全移动当前笔记（需要 obs-cli note.get/note.move）",
-})
-
---- :ObsidianVaultAudit
--- 通过只读 note.list 获取当前 Vault 快照；该入口不会自动修改任何文件。
-vim.api.nvim_create_user_command("ObsidianVaultAudit", function()
-  require("miniobsidian.move").audit()
-end, {
-  desc = "打开只读 Vault 审计结果（需要 obs-cli note.list）",
-})
-
-vim.api.nvim_create_user_command("ObsidianAgentAnalyze", function(opts)
-  require("miniobsidian.handoff").handoff("analyze", opts.args, opts)
-end, {
-  nargs = "*",
-  range = true,
-  desc = "将当前笔记或选区交给 Agent 做只读分析",
-})
-
-vim.api.nvim_create_user_command("ObsidianAgentUpdate", function(opts)
-  require("miniobsidian.handoff").handoff("update", opts.args, opts)
-end, {
-  nargs = "*",
-  range = true,
-  desc = "将当前笔记或选区交给 Agent 做受限安全更新",
-})
-
-vim.api.nvim_create_user_command("ObsidianAgentLastResult", function()
-  require("miniobsidian.agent_result").show_last()
-end, {
-  desc = "重新打开最近一次 Agent result 摘要",
-})
-
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
 -- 监听 miniobsidian.init.setup() 触发的自定义事件 "MiniObsidianSetup"，
 -- 在事件回调中注册需要 config 已就绪的 autocmd（此时 vault_path 已被展开）。
@@ -203,8 +147,6 @@ vim.api.nvim_create_autocmd("User", {
 
     -- 创建独立 augroup，clear = true 确保不重复注册（若 once = true 失效时的兜底）
     local augroup = vim.api.nvim_create_augroup("miniobsidian_buffers", { clear = true })
-    require("miniobsidian.external_changes").setup_autocmds(augroup)
-
     -- 主动触发补全：只在「进入」[[ 或 - [ 上下文的瞬间调用 blink.show()。
     -- 关键优化：不对上下文内的每个字符都调用 blink.show()。
     --   每次 blink.show() 会创建新 context，使 blink.cmp 内部缓存失效，

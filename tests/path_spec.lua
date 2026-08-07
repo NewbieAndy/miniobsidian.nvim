@@ -41,8 +41,8 @@ describe("vault path policy", function()
     assert.matches("PATH_OUTSIDE_VAULT", err)
   end)
 
-  it("matches the shared Windows path contract fixture", function()
-    local fixture = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/vault-contract/v1/windows-paths/cases.json"
+  it("matches the pinned Windows path fixture", function()
+    local fixture = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/windows-paths.json"
     local cases = vim.json.decode(table.concat(vim.fn.readfile(fixture), "\n"))
     for _, item in ipairs(cases.inputs) do
       local result = path.resolve(vault, item.path)
@@ -60,9 +60,9 @@ describe("vault path policy", function()
   it("resolves the nearest existing parent for a new target", function()
     local notes = path.join(vault, "Notes")
     vim.fn.mkdir(notes, "p")
-    local result = assert(path.resolve(vault, "Notes/New Folder/Agent.md"))
+    local result = assert(path.resolve(vault, "Notes/New Folder/Local.md"))
     assert.is_false(result.exists)
-    assert.equals(path.join(path.realpath(vault), "Notes/New Folder/Agent.md"), result.real_path)
+    assert.equals(path.join(path.realpath(vault), "Notes/New Folder/Local.md"), result.real_path)
   end)
 
   it("rejects a symlink escape and permits an internal symlink", function()

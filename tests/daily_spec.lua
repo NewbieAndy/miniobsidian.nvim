@@ -56,8 +56,8 @@ describe("daily", function()
     assert.same({ "keep me" }, vim.fn.readfile(path))
   end)
 
-  it("matches the shared daily-template fixture", function()
-    local fixture = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/vault-contract/v1/daily-template"
+  it("matches the pinned daily-template fixture", function()
+    local fixture = vim.env.MINIOBSIDIAN_ROOT .. "/tests/fixtures/daily-template"
     local expected = vim.json.decode(table.concat(vim.fn.readfile(fixture .. "/expected.json"), "\n"))
     local config = require("miniobsidian.config_sync").read_vault_config(fixture)
     local core = require("miniobsidian")
@@ -69,11 +69,11 @@ describe("daily", function()
 
     local timestamp = os.time({ year = 2026, month = 7, day = 24, hour = 9, min = 30, sec = 0 })
     local plan = assert(require("miniobsidian.daily").resolve_today({ timestamp = timestamp }))
-    assert.equals(expected.assertions[1].equals, plan.logical)
-    assert.truthy(plan.content:find("Previous: " .. expected.assertions[2].yesterday, 1, true))
-    assert.truthy(plan.content:find("Next: " .. expected.assertions[2].tomorrow, 1, true))
-    assert.truthy(plan.content:find("Custom: " .. expected.assertions[2].custom, 1, true))
-    assert.truthy(plan.content:find(expected.assertions[3].preserved, 1, true))
+    assert.equals(expected.path, plan.logical)
+    assert.truthy(plan.content:find("Previous: " .. expected.yesterday, 1, true))
+    assert.truthy(plan.content:find("Next: " .. expected.tomorrow, 1, true))
+    assert.truthy(plan.content:find("Custom: " .. expected.custom, 1, true))
+    assert.truthy(plan.content:find(expected.preserved, 1, true))
     assert.equals(1, #plan.warnings)
   end)
 

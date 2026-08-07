@@ -1,221 +1,124 @@
-*miniobsidian.txt*  Lightweight Obsidian workflow for Neovim
+*miniobsidian.txt*        Lightweight Obsidian workflows for Neovim
 
-==============================================================================
-INTRODUCTION                                                        *miniobsidian*
+===============================================================================
+CONTENTS                                                        *miniobsidian*
 
-miniobsidian.nvim is a lightweight, focused Obsidian workflow plugin for Neovim.
+1. Introduction                                      |miniobsidian-introduction|
+2. Setup                                                    |miniobsidian-setup|
+3. Commands                                              |miniobsidian-commands|
+4. API                                                        |miniobsidian-api|
+5. Events                                                  |miniobsidian-events|
 
-It provides:
-  - Multi-vault support (auto-discovery under a parent folder)
-  - Note creation (with YAML frontmatter) and quick switching
-  - Ripgrep-powered full-text search (via snacks.nvim picker)
-  - Wikilink navigation with path disambiguation, headings, and block IDs
-  - Checkbox management (toggle/clear, multi-state)
-  - Image pasting on macOS (osascript)
-  - Templates and daily notes
-  - External-change detection with a SHA-256 write guard
-  - Optional obs-cli move/audit and Agent handoff workflows
+===============================================================================
+1. INTRODUCTION                                      *miniobsidian-introduction*
 
-==============================================================================
-REQUIREMENTS                                                   *miniobsidian-requirements*
+miniobsidian.nvim provides Vault discovery, note creation, search, Wikilinks,
+templates, Daily Notes, checkboxes, and image paste. It is a standalone editor
+plugin and has no external CLI or Agent integration.
 
-Required:
-  - Neovim >= 0.10.4
+The plugin does not coordinate concurrent writes made by other applications.
+Neovim's native file-change behavior applies. Create operations do use
+no-replace semantics, so an existing target is never truncated.
 
-Optional:
-  - snacks.nvim (required only for quick switch and full-text search; also
-    enhances template and Vault selection)
-  - ripgrep (rg; required only for full-text search)
-  - blink.cmp (wiki link / checkbox completion)
-  - osascript (macOS only, for image pasting)
-  - obs-cli V1 with obs-cli/v1 + vault-contract/v1 capabilities
-    (advanced integrations only)
+===============================================================================
+2. SETUP                                                    *miniobsidian-setup*
 
-Health check:
-  :checkhealth miniobsidian
-
-==============================================================================
-SETUP                                                           *miniobsidian-setup*
-
-Lua:
->
+>lua
   require("miniobsidian").setup({
-    vaults_parent = "~/Documents/Obsidian",
-    default_vault = "MyVault",
-    cli = {
-      enabled = "auto",
-      command = "obs-cli",
-      timeout_ms = 3000,
-    },
-    agent = {
-      handler = nil,
-      confirm_content = true,
-      large_selection_lines = 200,
-    },
+    vaults_parent = "",
+    default_vault = "",
+    auto_discover = true,
+    sync_obsidian_config = true,
+    notes_subdir = "Notes",
+    dailies_folder = "",
+    daily_template = "",
+    daily_default_content = "",
+    templates_folder = "Templates",
+    attachments_folder = "Assets",
+    daily_date_format = "%Y-%m-%d",
+    picker_scope = "notes",
+    change_cwd_on_switch = false,
+    checkbox_states = { " ", "x" },
+    note_id_func = function(title)
+      return title:lower():gsub("%s+", "-")
+    end,
+    on_vault_switch = nil,
+    after_note_open = nil,
   })
 <
 
-When dailies_folder is empty, Daily Notes are created in the Vault root. This
-default also applies when .obsidian/daily-notes.json is missing or has no folder.
+User values take precedence over settings read from .obsidian/app.json and
+.obsidian/daily-notes.json.
 
-The CLI adapter is optional. "auto" asynchronously probes capabilities when the
-executable exists. Missing, timed-out, invalid, or incompatible CLI responses
-never disable local note features.
+===============================================================================
+3. COMMANDS                                              *miniobsidian-commands*
 
-Set agent.handler to function(payload) ... end only when connecting an Agent
-framework. Built-in Agent analyze requires obs-cli note.get; Agent update
-requires note.get and note.patch.
+                                                               *:ObsidianNew*
+:ObsidianNew[!] [title]
+    Create or open a note in notes_subdir.
 
-==============================================================================
-COMMANDS                                                     *miniobsidian-commands*
+                                                           *:ObsidianNewHere*
+:ObsidianNewHere
+    Create a note in the directory selected by a supported file explorer.
 
-All commands are registered under the "Obsidian" prefix.
+                                                        *:ObsidianSwitchVault*
+:ObsidianSwitchVault
+    Select the active Vault.
 
-:ObsidianNew[!] [title]                                      *:ObsidianNew*
-    Create a new note in notes_subdir. If [title] is omitted, prompts for input.
-    With !, passes switch_root=true to after_note_open.
+                                                            *:ObsidianSwitch*
+:ObsidianSwitch
+    Open the note picker.
 
-:ObsidianNewHere                                             *:ObsidianNewHere*
-    Create a new note in the directory under your file explorer cursor.
-    Falls back to notes_subdir if no explorer context is detected.
+                                                            *:ObsidianSearch*
+:ObsidianSearch [query]
+    Search Markdown content with snacks.nvim and ripgrep.
 
-:ObsidianSwitchVault                                         *:ObsidianSwitchVault*
-    Pick and switch the active vault.
+                                                          *:ObsidianTemplate*
+:ObsidianTemplate
+    Select and insert a template.
 
-:ObsidianSwitch                                              *:ObsidianSwitch*
-    Quick switch notes inside the active vault (snacks.nvim picker).
+                                                       *:ObsidianNewTemplate*
+:ObsidianNewTemplate [name]
+    Create or open a template without replacing an existing file.
 
-:ObsidianSearch [query]                                      *:ObsidianSearch*
-    Full-text search inside the active vault (rg + snacks.nvim picker).
+                                                          *:ObsidianPasteImg*
+:ObsidianPasteImg [name]
+    Paste a clipboard image on macOS.
 
-:ObsidianTemplate                                            *:ObsidianTemplate*
-    Pick a template from templates_folder and insert it with variable expansion.
+                                                             *:ObsidianToday*
+:ObsidianToday[!]
+    Open or exclusively create today's Daily Note.
 
-:ObsidianNewTemplate [name]                                  *:ObsidianNewTemplate*
-    Create a new template file under templates_folder. Prompts if omitted.
+                                                             *:ObsidianSetup*
+:ObsidianSetup
+    Initialize the plugin with defaults.
 
-:ObsidianPasteImg [name]                                     *:ObsidianPasteImg*
-    Paste an image from the macOS clipboard to attachments_folder and insert
-    a relative Markdown image link. Prompts if omitted.
+===============================================================================
+4. API                                                        *miniobsidian-api*
 
-:ObsidianToday[!]                                             *:ObsidianToday*
-    Open (or create) today's daily note under dailies_folder.
-    With !, passes switch_root=true to after_note_open.
-
-:ObsidianSetup                                               *:ObsidianSetup*
-    Initialize with default config (mostly for testing).
-
-:ObsidianResolveConflict                       *:ObsidianResolveConflict*
-    Inspect and resolve an external change for the current note. Offers a diff,
-    preserving the Neovim buffer, or explicitly reloading the disk version.
-
-:ObsidianCLIRefresh                                    *:ObsidianCLIRefresh*
-    Refresh the optional obs-cli capability cache asynchronously.
-
-:ObsidianMove [target]                                      *:ObsidianMove*
-    Read the current revision, preview the obs-cli note.move dry-run, and apply
-    only after confirmation with the exact revision and plan hash. Requires
-    note.get and note.move capabilities. Unsaved buffers are rejected.
-
-:ObsidianVaultAudit                                    *:ObsidianVaultAudit*
-    Open a readonly JSON snapshot from obs-cli note.list. This command never
-    applies audit or batch changes. Requires the note.list capability.
-
-:[range]ObsidianAgentAnalyze [intent]              *:ObsidianAgentAnalyze*
-    Send a bounded miniobsidian.agent-handoff/v1 payload to agent.handler for
-    readonly analysis. Dirty buffer content is previewed and never grants writes.
-    Prompts when intent is omitted. Requires obs-cli note.get.
-
-:[range]ObsidianAgentUpdate [intent]                *:ObsidianAgentUpdate*
-    Send a handoff limited to updating the current note with
-    obsidian-safe-note-update. Prompts when intent is omitted. The buffer must be
-    saved first. Requires obs-cli note.get and note.patch.
-
-:ObsidianAgentLastResult                         *:ObsidianAgentLastResult*
-    Reopen the latest miniobsidian.agent-result/v1 summary. Agent integrations
-    deliver results through require("miniobsidian.agent_result").handle(result).
-    Dirty buffers use explicit base / Agent disk / local views and are never
-    reloaded automatically.
-
-==============================================================================
-EVENTS                                                         *miniobsidian-events*
-
-User autocommands:
-
-User MiniObsidianSetup
-    Fired after require("miniobsidian").setup() completes.
-
-User MiniObsidianVaultSwitch
-    Fired after switching vaults.
-    event.data contains { name = "...", path = "..." }.
-
-User MiniObsidianNoteOpened
-    Fired after a note created or opened by the note/daily workflow is ready.
-    event.data contains { path = "...", opts = { switch_root = boolean } }.
-
-User MiniObsidianAgentHandoff
-    Fired after an Agent handoff is dispatched successfully.
-    event.data contains { request_id = "...", mode = "...", path = "..." }.
-
-==============================================================================
-WIKILINKS                                                   *miniobsidian-wikilinks*
-
-Supported forms:
-  [[Note]]
-  [[Note|Alias]]
-  [[Folder/Note]]
-  [[Note#Heading]]
-  [[Note#^block-id]]
-
-Qualified targets resolve by the complete Vault-relative Note ID. Bare targets
-resolve by basename; duplicate basenames always open a disambiguation selector.
-Heading links move the cursor to the matching heading, including duplicate
-anchor suffixes such as "-1". Block IDs require an exact match. Missing qualified
-targets can be created in their requested directory.
-
-==============================================================================
-EXTERNAL CHANGES                                     *miniobsidian-external-changes*
-
-FocusGained and BufEnter run throttled native checktime checks. FileChangedShell
-uses external_change_mode:
-
-  "prompt"  Preserve the buffer and offer diff / keep / reload.
-  "reload"  Reload only clean buffers; dirty buffers still conflict.
-  "notify"  Preserve the buffer and notify.
-
-In addition, every loaded Vault Markdown buffer records a SHA-256 baseline of
-its disk content. BufWritePre verifies that baseline synchronously, so a stale
-write is blocked even when no focus change or checktime has occurred. Use
-:ObsidianResolveConflict to reopen conflict actions.
-
-==============================================================================
-LUA API                                                         *miniobsidian-api*
-
-Core:
-  require("miniobsidian").setup(opts)
-  require("miniobsidian").get_all_notes(force?)
-  require("miniobsidian").invalidate_cache()
-  require("miniobsidian").in_vault(path)
-
-Common workflows:
-  require("miniobsidian.note").new_note(title?)
+>lua
+  require("miniobsidian.note").new_note(title?, opts?)
+  require("miniobsidian.note").new_note_here()
   require("miniobsidian.note").quick_switch()
   require("miniobsidian.note").search(query?)
-  require("miniobsidian.daily").open_today()
+  require("miniobsidian.daily").open_today(opts?)
   require("miniobsidian.template").insert()
+  require("miniobsidian.template").new_template(name?)
   require("miniobsidian.vault").pick_and_switch()
+  require("miniobsidian.link").follow_link_or_toggle()
+  require("miniobsidian.checkbox").toggle()
+<
 
-Optional advanced workflows:
-  require("miniobsidian.move").move_current(target?)
-  require("miniobsidian.move").audit()
-  require("miniobsidian.handoff").handoff(mode, intent?, command_opts?)
-  require("miniobsidian.agent_result").handle(result)
+===============================================================================
+5. EVENTS                                                  *miniobsidian-events*
 
-==============================================================================
-CONFIG                                                         *miniobsidian-config*
+MiniObsidianSetup
+    Fired after setup finishes.
 
-See README.en.md for the full configuration reference. Chinese help:
-  :help miniobsidian-zh
+MiniObsidianVaultSwitch
+    Fired after switching Vault. Data: { name, path }.
 
-==============================================================================
-vim:tw=78:ts=8:ft=help:norl:
+MiniObsidianNoteOpened
+    Fired after a note is opened. Data: { path, opts }.
+
+vim:tw=78:ts=8:noet:ft=help:norl:

@@ -71,38 +71,27 @@ function M.new_template(name)
     end
     local path = target.path
 
-    -- 若文件已存在直接打开，不覆盖
-    if vim.fn.filereadable(path) == 0 then
-      -- 骨架内容：包含 frontmatter 和最常用的占位变量说明
-      local skeleton = table.concat({
-        "---",
-        "title: {{title}}",
-        "date: {{date}}",
-        "tags: []",
-        "---",
-        "",
-        "# {{title}}",
-        "",
-        "> 📅 {{date}}  ·  🕐 {{time}}",
-        "",
-        "---",
-        "",
-        "",
-      }, "\n")
+    -- 骨架内容：包含 frontmatter 和最常用的占位变量说明
+    local skeleton = table.concat({
+      "---",
+      "title: {{title}}",
+      "date: {{date}}",
+      "tags: []",
+      "---",
+      "",
+      "# {{title}}",
+      "",
+      "> 📅 {{date}}  ·  🕐 {{time}}",
+      "",
+      "---",
+      "",
+      "",
+    }, "\n")
 
-      local ok, err = pcall(function()
-        local f = io.open(path, "w")
-        if not f then
-          error("无法创建文件: " .. path)
-        end
-        f:write(skeleton)
-        f:close()
-      end)
-
-      if not ok then
-        vim.notify("[miniobsidian] 创建模板失败: " .. tostring(err), vim.log.levels.ERROR)
-        return
-      end
+    local created, create_err = require("miniobsidian.fs").create_exclusive(path, skeleton)
+    if created == nil then
+      vim.notify("[miniobsidian] 创建模板失败: " .. tostring(create_err), vim.log.levels.ERROR)
+      return
     end
 
     vim.schedule(function()
