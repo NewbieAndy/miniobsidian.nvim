@@ -193,7 +193,7 @@ function M.paste_img(name)
     -- JXA 先写入同目录临时文件，再通过 hard link 排他发布。
     -- hard link 在目标已存在时返回 EEXIST，因此即使发生并发竞争也不会覆盖原文件。
     local published, publish_err = require("miniobsidian.fs").link_exclusive(temp_path, abs_path)
-    vim.uv.fs_unlink(temp_path)
+    require("miniobsidian.fs").unlink(temp_path)
     if published == false then
       vim.notify("[miniobsidian] 图片目标已存在，请重试: " .. abs_path, vim.log.levels.WARN)
       return

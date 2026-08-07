@@ -303,6 +303,7 @@ core.default_config()            -- 返回新的默认配置表
 core.validate_config(config)     -- 返回错误字符串列表
 core.get_all_notes(force)        -- Vault 内安全的 Markdown 绝对路径列表
 core.invalidate_cache()
+core.update_note_cache(path)     -- 插件写入后的单路径增量更新
 core.in_vault(path)
 
 local note = require("miniobsidian.note")
@@ -328,6 +329,8 @@ require("miniobsidian.image").paste_img(name?)
 以下主要是集成或内部辅助接口，可能比上面的用户工作流 API 更容易变化：
 `wikilink.parse/resolve/locate_fragment`、`config_sync.*`、`path.*`、`fs.*`、
 `image.resolve_for_snacks`、`completion.new`。
+
+用户回调异常会被隔离并产生 WARN 通知，不会中断笔记打开或 Vault 切换流程。
 
 ## 常用按键示例
 

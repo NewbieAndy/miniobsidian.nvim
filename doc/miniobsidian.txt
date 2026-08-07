@@ -240,6 +240,7 @@ Core:
   core.validate_config(config)     -- string[]
   core.get_all_notes(force)        -- absolute string[]
   core.invalidate_cache()
+  core.update_note_cache(path)
   core.get_cache_stamp()
   core.note_stem(path)
   core.in_vault(path)
@@ -286,6 +287,8 @@ after_note_open(path, opts)
 on_vault_switch(name, path)
     Runs after Vault configuration is committed, the cache is invalidated, and
     MiniObsidianVaultSwitch fires.
+
+User callback failures produce WARN notifications without interrupting plugin flow.
 
 quick_switch() and search() let snacks open files and do not call after_note_open.
 Use BufEnter plus core.in_vault(path) for picker-opened notes.

@@ -2,7 +2,7 @@
 -- 文件名：vault.lua
 -- 模块职责：vault 的扫描发现、运行时切换以及选择 UI。
 --           通过检测子目录内是否含有 .obsidian/ 来识别有效的 Obsidian vault。
--- 依赖关系：miniobsidian（config、invalidate_cache）、snacks.nvim（可选，回退 vim.ui.select）
+-- 依赖关系：miniobsidian（config、缓存与回调）、snacks.nvim（可选，回退 vim.ui.select）
 -- 对外 API：M.list_vaults(parent)、M.refresh_vaults()、M.do_switch(entry)、M.pick_and_switch()
 -- ============================================================
 local M = {}
@@ -138,12 +138,7 @@ function M.do_switch(entry)
   })
 
   -- 调用用户配置的 on_vault_switch 回调（如果存在）
-  if core.config.on_vault_switch then
-    local cb_ok, cb_err = pcall(core.config.on_vault_switch, entry.name, real)
-    if not cb_ok then
-      vim.notify("[miniobsidian] on_vault_switch 回调执行失败: " .. tostring(cb_err), vim.log.levels.WARN)
-    end
-  end
+  core.run_callback("on_vault_switch", core.config.on_vault_switch, entry.name, real)
 
   vim.notify("[miniobsidian] 已切换到 vault：" .. entry.name, vim.log.levels.INFO)
 end

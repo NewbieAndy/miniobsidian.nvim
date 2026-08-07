@@ -97,7 +97,10 @@ function M.locate_fragment(absolute, link)
   if not link.heading and not link.block then
     return nil
   end
-  local lines = vim.fn.readfile(absolute)
+  local lines = require("miniobsidian.fs").read_lines(absolute)
+  if not lines then
+    return nil, "FRAGMENT_READ_FAILED"
+  end
   if link.block then
     local escaped = vim.pesc(link.block)
     for index, line in ipairs(lines) do

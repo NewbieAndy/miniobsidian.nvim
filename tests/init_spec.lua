@@ -85,4 +85,23 @@ describe("miniobsidian init", function()
     assert.truthy(table.concat(errors, "\n"):find("notes_subdir", 1, true))
     helpers.cleanup(parent)
   end)
+
+  it("reports callback failures without propagating them", function()
+    local core = helpers.configure(vault)
+    local previous_notify = vim.notify
+    local notifications = {}
+    vim.notify = function(message, level)
+      notifications[#notifications + 1] = { message = message, level = level }
+    end
+
+    local ok = core.run_callback("after_note_open", function()
+      error("callback exploded")
+    end)
+
+    vim.notify = previous_notify
+    assert.is_false(ok)
+    assert.equals(vim.log.levels.WARN, notifications[1].level)
+    assert.truthy(notifications[1].message:find("after_note_open 回调执行失败", 1, true))
+    assert.truthy(notifications[1].message:find("callback exploded", 1, true))
+  end)
 end)

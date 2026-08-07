@@ -180,27 +180,14 @@ function M.insert()
       return
     end -- 防御性检查，理论上不会触发
 
-    -- pcall 保护文件读取：
-    --   • io.open 失败时返回 nil 而非抛出错误，需手动 error() 转为异常
-    --   • 确保文件句柄在异常情况下也能被正确关闭（f:close() 已在 pcall 内）
-    local ok, lines = pcall(function()
-      local f = io.open(path, "r")
-      if not f then
-        error("无法读取模板: " .. path)
-      end
-      local content = f:read("*a") -- "*a" 一次性读取全部内容
-      f:close()
-      return content
-    end)
-
-    if not ok then
-      -- lines 在失败时保存的是 pcall 捕获到的错误信息字符串
-      vim.notify("[miniobsidian] 读取模板失败: " .. tostring(lines), vim.log.levels.ERROR)
+    local content_source, read_err = require("miniobsidian.fs").read(path)
+    if not content_source then
+      vim.notify("[miniobsidian] 读取模板失败: " .. tostring(read_err), vim.log.levels.ERROR)
       return
     end
 
     -- 执行占位变量替换
-    local content, warnings, render_err = M.render(lines, {
+    local content, warnings, render_err = M.render(content_source, {
       title = title,
       date_format = cfg.daily_date_format,
     })

@@ -308,6 +308,7 @@ core.default_config()
 core.validate_config(config)
 core.get_all_notes(force)
 core.invalidate_cache()
+core.update_note_cache(path)     -- single-path update after a plugin write
 core.in_vault(path)
 
 local note = require("miniobsidian.note")
@@ -332,6 +333,9 @@ require("miniobsidian.image").paste_img(name?)
 
 Lower-level integration helpers may change more readily: `wikilink.*`,
 `config_sync.*`, `path.*`, `fs.*`, `image.resolve_for_snacks`, and `completion.new`.
+
+User callback failures are isolated and reported at WARN level; they do not interrupt
+note-open or Vault-switch workflows.
 
 The plugin defines no keymaps.
 

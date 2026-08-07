@@ -6,6 +6,55 @@ local function is_exists_error(err)
   return type(err) == "string" and err:match("^EEXIST") ~= nil
 end
 
+---Read a complete file as bytes.
+---@param path string
+---@return string|nil content
+---@return string|nil error
+function M.read(path)
+  local file, open_err = io.open(path, "rb")
+  if not file then
+    return nil, tostring(open_err)
+  end
+  local ok, content = pcall(file.read, file, "*a")
+  local closed, close_err = file:close()
+  if not ok then
+    return nil, tostring(content)
+  end
+  if not closed then
+    return nil, tostring(close_err or "close failed")
+  end
+  return content, nil
+end
+
+---Read a text file into lines using Neovim's newline semantics.
+---@param path string
+---@return string[]|nil lines
+---@return string|nil error
+function M.read_lines(path)
+  local content, err = M.read(path)
+  if not content then
+    return nil, err
+  end
+  if content == "" then
+    return {}, nil
+  end
+  local lines = vim.split(content, "\n", { plain = true })
+  if content:sub(-1) == "\n" then
+    table.remove(lines, #lines)
+  end
+  return lines, nil
+end
+
+---Best-effort removal for plugin-owned temporary files.
+---@param path string
+---@return boolean
+function M.unlink(path)
+  if not uv.fs_stat(path) then
+    return true
+  end
+  return uv.fs_unlink(path) ~= nil
+end
+
 ---Create a file without replacing an existing path.
 ---@param path string
 ---@param content string

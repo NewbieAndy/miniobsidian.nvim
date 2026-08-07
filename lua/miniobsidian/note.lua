@@ -1,334 +1,40 @@
--- ============================================================
--- 文件名：note.lua
--- 模块职责：负责笔记的创建（含 YAML frontmatter 生成）、
---           vault 内笔记的快速切换（文件跳转），
---           以及基于 ripgrep 的全文搜索入口。
--- 依赖关系：miniobsidian（config、invalidate_cache）、snacks.nvim（picker）
--- 对外 API：M.new_note(title?)、M.new_note_here()、M.new_note_in_dir(dir)
---           M.quick_switch()、M.search(query)、M.follow_or_create(stem)
---           内部辅助：M._create_note(title, dir?)（供测试或外部调用）
--- ============================================================
+---Public note facade. Creation, explorer detection, and picker integration live in
+---smaller modules while these established API names remain compatible.
 local M = {}
 local path_policy = require("miniobsidian.path")
 
--- ──────────────────────────────────────────────
--- 私有工具函数
--- ──────────────────────────────────────────────
-
---- 根据笔记标题计算其目标文件路径，并确保父目录存在。
--- 路径规则：{target_dir}/{note_id_func(title)}.md
--- 若 target_dir 未指定，回退到 {vault_path}/{notes_subdir}。
----@param title string 笔记标题
----@param target_dir? string 目标目录绝对路径（nil 时使用 notes_subdir）
----@return string|nil filepath 笔记文件的完整绝对路径
----@return string|nil error
-local function note_path(title, target_dir, explicit_id)
-  local cfg = require("miniobsidian").config
-  -- 使用用户配置的 ID 函数将标题转为文件名 slug
-  local id = explicit_id or cfg.note_id_func(title)
-  local directory, err
-  if target_dir then
-    directory, err = path_policy.resolve(cfg.vault_path, target_dir, {
-      allow_absolute = true,
-      allow_empty = true,
-    })
-  else
-    directory, err = path_policy.resolve(cfg.vault_path, cfg.notes_subdir, { allow_empty = true })
-  end
-  if not directory then
-    return nil, err
-  end
-
-  local logical = directory.logical == "" and (id .. ".md") or (directory.logical .. "/" .. id .. ".md")
-  local target, target_err = path_policy.resolve(cfg.vault_path, logical)
-  if not target then
-    return nil, target_err
-  end
-  vim.fn.mkdir(vim.fn.fnamemodify(target.path, ":h"), "p")
-  return target.path
+function M.new_note(...)
+  return require("miniobsidian.note_create").new_note(...)
 end
 
--- ──────────────────────────────────────────────
--- 文件浏览器上下文检测
--- ──────────────────────────────────────────────
-
---- 检测当前窗口的文件浏览器类型，返回光标所在位置对应的目录路径。
--- 优先级：snacks explorer → neo-tree → nvim-tree → oil.nvim → netrw
--- 所有 require 均包裹在 pcall 中，任一插件未安装时静默跳过。
--- 规则：
---   • 光标在目录节点上 → 返回该目录
---   • 光标在文件节点上 → 返回该文件的父目录
----@return string|nil dir 目标目录绝对路径（nil 表示无法从文件浏览器检测）
-local function get_dir_from_explorer()
-  local current_win = vim.api.nvim_get_current_win()
-  local ft = vim.bo.filetype
-
-  -- ── 1. Snacks Explorer ────────────────────────────────────────────────
-  -- snacks explorer 是基于 picker 的文件树（source = "explorer"）。
-  -- 通过 Snacks.picker.get() 获取活跃实例，校验当前窗口是否为其列表窗口，
-  -- 再用 picker:selected({ fallback = true }) 获取光标下条目（无选中时回退到光标项）。
-  do
-    local ok, snacks = pcall(require, "snacks")
-    if ok and snacks.picker then
-      local exps_ok, exps = pcall(function()
-        return snacks.picker.get({ source = "explorer" })
-      end)
-      if exps_ok and exps then
-        for _, exp in ipairs(exps) do
-          local list_win = exp.list and exp.list.win and exp.list.win.win
-          if list_win and list_win == current_win then
-            local items_ok, items = pcall(function()
-              return exp:selected({ fallback = true })
-            end)
-            if items_ok and items and #items > 0 then
-              local path = items[1].file
-              if path and path ~= "" then
-                -- 去除 oil 风格的末尾斜杠后再判断（snacks explorer 一般无，但防御性处理）
-                local clean = path:gsub("/+$", "")
-                if vim.fn.isdirectory(path) == 1 then
-                  return clean
-                else
-                  return vim.fn.fnamemodify(clean, ":h")
-                end
-              end
-            end
-          end
-        end
-      end
-    end
-  end
-
-  -- ── 2. neo-tree ──────────────────────────────────────────────────────
-  if ft == "neo-tree" then
-    local ok, manager = pcall(require, "neo-tree.sources.manager")
-    if ok then
-      local state = manager.get_state("filesystem")
-      local node = state and state.tree and state.tree:get_node()
-      if node and node.path then
-        if node.type == "directory" then
-          return node.path
-        else
-          return vim.fn.fnamemodify(node.path, ":h")
-        end
-      end
-    end
-  end
-
-  -- ── 3. nvim-tree ─────────────────────────────────────────────────────
-  if ft == "NvimTree" then
-    local ok, api = pcall(require, "nvim-tree.api")
-    if ok then
-      local node_ok, node = pcall(function()
-        return api.tree.get_node_under_cursor()
-      end)
-      if node_ok and node and node.absolute_path then
-        if node.type == "directory" then
-          return node.absolute_path
-        else
-          return vim.fn.fnamemodify(node.absolute_path, ":h")
-        end
-      end
-    end
-  end
-
-  -- ── 4. oil.nvim ──────────────────────────────────────────────────────
-  -- oil 的 get_current_dir() 返回当前正在浏览的目录（含末尾斜杠）。
-  -- get_cursor_entry() 返回光标下条目：type = "directory" 时进入子目录。
-  if ft == "oil" then
-    local ok, oil = pcall(require, "oil")
-    if ok then
-      local dir_ok, dir = pcall(function()
-        return oil.get_current_dir()
-      end)
-      if dir_ok and dir then
-        local entry_ok, entry = pcall(function()
-          return oil.get_cursor_entry()
-        end)
-        if entry_ok and entry and entry.type == "directory" and entry.name then
-          -- 光标在子目录条目上：拼接进入子目录
-          return (dir .. entry.name):gsub("/+$", "")
-        end
-        -- 光标在文件条目，或无法获取条目：使用当前浏览目录
-        return dir:gsub("/+$", "")
-      end
-    end
-  end
-
-  -- ── 5. 系统默认（netrw）──────────────────────────────────────────────
-  -- b:netrw_curdir 记录 netrw 当前浏览目录。
-  -- expand("<cfile>") 在 netrw 中返回光标下的文件/目录名。
-  if ft == "netrw" then
-    local curdir = vim.b.netrw_curdir
-    if curdir and curdir ~= "" then
-      local fname = vim.fn.expand("<cfile>")
-      if fname and fname ~= "" and fname ~= "." and fname ~= ".." then
-        local full = curdir .. "/" .. fname
-        if vim.fn.isdirectory(full) == 1 then
-          return full
-        end
-      end
-      return curdir
-    end
-  end
-
-  return nil
+function M.new_note_in_dir(...)
+  return require("miniobsidian.note_create").new_note_in_dir(...)
 end
 
--- ──────────────────────────────────────────────
--- 公开 API
--- ──────────────────────────────────────────────
-
---- 新建笔记的对外入口（快捷创建）。
--- 若 title 非空，直接创建并跳转；
--- 若 title 为 nil 或空字符串，先弹出输入框让用户输入标题。
--- 笔记始终创建到 config.notes_subdir 目录（快捷创建，无需关心归档位置）。
--- 副作用：调用 vim.ui.input 时会短暂暂停等待用户输入。
----@param title? string 笔记标题（可选；为 nil 或 "" 时弹出交互输入框）
----@param opts? { switch_root?: boolean, note_id?: string }
-function M.new_note(title, opts)
-  opts = opts or {}
-
-  if title and title ~= "" then
-    M._create_note(title, nil, opts)
-  else
-    vim.ui.input({ prompt = "新笔记标题: " }, function(input)
-      if input and input ~= "" then
-        M._create_note(input, nil, opts)
-      end
-    end)
-  end
+function M.new_note_here(...)
+  return require("miniobsidian.note_create").new_note_here(...)
 end
 
---- 在指定目录创建笔记（公开 API，供自定义键映射调用）。
--- 弹出 vim.ui.input 让用户输入标题，在 dir 目录下创建笔记。
--- 适用场景：用户已通过其他方式获得目标目录路径，直接传入。
--- 前置条件：dir 必须为绝对路径且位于当前活跃 vault 内。
----@param dir string 目标目录绝对路径
-function M.new_note_in_dir(dir)
-  local core = require("miniobsidian")
-  dir = dir:gsub("/+$", "") -- 去除末尾多余斜杠，保持路径格式一致
-
-  if not core.in_vault(dir) then
-    vim.notify("[miniobsidian] 目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
-    return
-  end
-
-  vim.ui.input({ prompt = "新笔记标题: " }, function(input)
-    if input and input ~= "" then
-      M._create_note(input, dir)
-    end
-  end)
+function M._create_note(...)
+  return require("miniobsidian.note_create").create(...)
 end
 
---- 检测当前文件浏览器上下文，在光标所在目录创建笔记。
--- 支持（按优先级）：snacks explorer → neo-tree → nvim-tree → oil.nvim → netrw
--- 降级策略：
---   • 检测到目录但不在 vault 内 → 发出 WARN 并中止（不静默回退，防止误操作）
---   • 未检测到任何文件浏览器  → 回退到 config.notes_subdir 并给出 INFO 提示
-function M.new_note_here()
-  local core = require("miniobsidian")
-  local dir = get_dir_from_explorer()
-
-  if dir then
-    dir = dir:gsub("/+$", "")
-    if not core.in_vault(dir) then
-      vim.notify("[miniobsidian] 目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
-      return
-    end
-  else
-    -- 无法从文件浏览器检测，回退到默认 notes_subdir
-    local resolved, err = path_policy.resolve(core.config.vault_path, core.config.notes_subdir, { allow_empty = true })
-    if not resolved then
-      vim.notify("[miniobsidian] 默认笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
-      return
-    end
-    dir = resolved.path
-    vim.notify(
-      "[miniobsidian] 未检测到文件树焦点，将创建到默认目录: " .. core.config.notes_subdir,
-      vim.log.levels.INFO
-    )
-  end
-
-  vim.ui.input({ prompt = "新笔记标题: " }, function(input)
-    if input and input ~= "" then
-      M._create_note(input, dir)
-    end
-  end)
+function M.quick_switch(...)
+  return require("miniobsidian.note_picker").quick_switch(...)
 end
 
---- 执行笔记创建的核心逻辑（内部函数，也可供外部直接调用）。
--- 行为：
---   1. 生成目标路径和 frontmatter 内容。
---   2. 若文件不存在，写入 frontmatter 并刷新路径缓存。
---   3. 若文件已存在，直接跳转（等幂，不覆盖已有内容）。
--- 副作用：
---   • 可能创建新文件（io.open 写入）。
---   • 调用 invalidate_cache() 刷新笔记列表缓存。
---   • 通过 vim.cmd("edit ...") 打开/跳转到文件。
----@param title string 笔记标题（不能为空）
----@param dir?  string 目标目录绝对路径（nil 时使用 notes_subdir）
----@param opts? { switch_root?: boolean }
-function M._create_note(title, dir, opts)
-  opts = opts or {}
-  local path, path_err = note_path(title, dir, opts.note_id)
-  if not path then
-    vim.notify("[miniobsidian] 笔记路径不安全: " .. tostring(path_err), vim.log.levels.ERROR)
-    return
-  end
-  local cfg = require("miniobsidian").config
-  local date_str = os.date(cfg.daily_date_format)
-
-  local core = require("miniobsidian")
-  local frontmatter = table.concat({
-    "---",
-    "title: " .. core.yaml_quote(title),
-    "date: " .. date_str,
-    "tags: []",
-    "---",
-    "",
-    "# " .. title,
-    "",
-  }, "\n")
-
-  local is_new, create_err = require("miniobsidian.fs").create_exclusive(path, frontmatter)
-  if is_new == nil then
-    vim.notify("[miniobsidian] 创建笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
-    return
-  end
-  if is_new then
-    core.invalidate_cache()
-  end
-
-  vim.schedule(function()
-    vim.cmd("edit " .. vim.fn.fnameescape(path))
-
-    if is_new then
-      local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-      for i, line in ipairs(lines) do
-        if line:match("^# ") then
-          vim.api.nvim_win_set_cursor(0, { math.min(i + 1, #lines), 0 })
-          break
-        end
-      end
-    end
-
-    core.after_note_open(path, opts)
-  end)
+function M.search(...)
+  return require("miniobsidian.note_picker").search(...)
 end
 
---- 在 vault 内按 stem 查找笔记文件，找到则跳转；找不到则提示用户确认后创建。
--- 供 link.lua 的 follow_link_or_toggle() 调用。
---
--- 目录 target 按 Vault 相对 Note ID 精确解析；basename 重名时要求用户显式选择。
--- 不存在的目录 target 会在用户确认后保留原目录和文件名创建。
----@param input string|table Wikilink target 或解析结果
+---@param input string|table Wikilink target or parsed result
 function M.follow_or_create(input)
   local core = require("miniobsidian")
   local notes = core.get_all_notes()
   local wikilink = require("miniobsidian.wikilink")
   local link = type(input) == "table" and input or wikilink.parse(input)
   if not link then
-    vim.notify("[miniobsidian] 无法解析链接目标", vim.log.levels.WARN)
+    core.notify("无法解析链接目标", vim.log.levels.WARN)
     return
   end
 
@@ -339,10 +45,7 @@ function M.follow_or_create(input)
       if line then
         vim.api.nvim_win_set_cursor(0, { line, 0 })
       elseif fragment_err then
-        vim.notify(
-          "[miniobsidian] 链接片段不存在: " .. (link.heading or ("^" .. link.block)),
-          vim.log.levels.WARN
-        )
+        core.notify("链接片段不存在: " .. (link.heading or ("^" .. link.block)), vim.log.levels.WARN)
       end
     end)
   end
@@ -352,7 +55,6 @@ function M.follow_or_create(input)
     jump(resolved.path)
     return
   end
-
   if resolve_err.code == "AMBIGUOUS_NOTE" then
     vim.ui.select(resolve_err.candidates, { prompt = "选择同名笔记:" }, function(choice)
       if choice then
@@ -368,13 +70,13 @@ function M.follow_or_create(input)
   local target = link.target
   local bare = target:match("([^/]+)$")
   if not bare or bare == "" then
-    vim.notify("[miniobsidian] 无法解析链接目标: " .. target, vim.log.levels.WARN)
+    core.notify("无法解析链接目标: " .. target, vim.log.levels.WARN)
     return
   end
   local parent_id = target:match("^(.*)/[^/]+$") or ""
   local directory, directory_err = path_policy.resolve(core.config.vault_path, parent_id, { allow_empty = true })
   if not directory then
-    vim.notify("[miniobsidian] 链接创建路径不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    core.notify("链接创建路径不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
     return
   end
 
@@ -388,78 +90,6 @@ function M.follow_or_create(input)
       end
     )
   end)
-end
-
--- 快速切换与全文搜索仅遍历 Markdown 笔记文件。
--- 搜索范围限定为 notes_subdir，避免把模板、附件等非笔记内容混入结果。
-local MARKDOWN_EXTS = { "md" }
-
---- 返回笔记目录的绝对路径（处理 notes_subdir 为空字符串的情况）。
--- 当 notes_subdir = "" 时直接返回 vault_path，避免末尾出现多余的 "/"。
----@return string notes_dir 笔记目录绝对路径（无末尾斜杠）
-local function get_notes_dir()
-  local cfg = require("miniobsidian").config
-  local scope = cfg.picker_scope == "vault" and "" or (cfg.notes_subdir or "")
-  local resolved, err = path_policy.resolve(cfg.vault_path, scope, { allow_empty = true })
-  if not resolved then
-    vim.notify("[miniobsidian] 笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
-    return nil
-  end
-  return resolved.path
-end
-
--- 以 vault_path 为工作目录，打开文件模糊搜索浮窗。
--- 前置条件：需要 snacks.nvim 插件（Snacks.picker.files）。
--- 注意：此函数不调用 after_note_open，picker 的文件打开时机由 snacks.nvim 控制。
---       如需在选中文件后自动切换根目录，请在调用方注册 BufEnter 事件，参见 README。
-function M.quick_switch()
-  local notes_dir = get_notes_dir()
-  if not notes_dir then
-    return
-  end
-
-  local ok, snacks = pcall(require, "snacks")
-  if not ok then
-    vim.notify("[miniobsidian] 需要 snacks.nvim 插件", vim.log.levels.ERROR)
-    return
-  end
-
-  snacks.picker.files({
-    title = "  Notes",
-    cwd = notes_dir,
-    dirs = { notes_dir },
-    ft = MARKDOWN_EXTS,
-    hidden = false,
-  })
-end
-
---- 在 vault 内发起全文搜索（基于 ripgrep）。
--- 以 notes_subdir 为工作目录，通过 Snacks.picker.grep 打开搜索浮窗。
--- 若传入 query，将作为初始搜索词填入输入框。
--- 前置条件：需要 snacks.nvim 插件 + ripgrep（rg）可执行文件。
--- 注意：此函数不调用 after_note_open，参见 README 了解如何为 picker 流添加回调。
----@param query? string 初始搜索词（可选；传 nil 时浮窗为空输入状态）
-function M.search(query)
-  local notes_dir = get_notes_dir()
-  if not notes_dir then
-    return
-  end
-
-  local ok, snacks = pcall(require, "snacks")
-  if not ok then
-    vim.notify("[miniobsidian] 需要 snacks.nvim 插件", vim.log.levels.ERROR)
-    return
-  end
-
-  snacks.picker.grep({
-    title = " Notes",
-    cwd = notes_dir,
-    dirs = { notes_dir },
-    search = query,
-    cmd = "rg",
-    hidden = false,
-    glob = "*.md",
-  })
 end
 
 return M

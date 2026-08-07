@@ -56,4 +56,23 @@ describe("local file creation", function()
     assert.is_true(fs.link_exclusive(source, target))
     assert.same({ "new" }, vim.fn.readfile(target))
   end)
+
+  it("reads bytes and lines through the shared I/O helpers", function()
+    local fs = require("miniobsidian.fs")
+    local path = vault .. "/Notes/read.md"
+    vim.fn.writefile({ "first", "second" }, path)
+    assert.equals("first\nsecond\n", fs.read(path))
+    assert.same({ "first", "second" }, fs.read_lines(path))
+  end)
+
+  it("reports missing reads and safely removes temporary files", function()
+    local fs = require("miniobsidian.fs")
+    local path = vault .. "/Notes/temp"
+    local content, err = fs.read(path)
+    assert.is_nil(content)
+    assert.truthy(err)
+    vim.fn.writefile({ "temp" }, path)
+    assert.is_true(fs.unlink(path))
+    assert.is_true(fs.unlink(path))
+  end)
 end)

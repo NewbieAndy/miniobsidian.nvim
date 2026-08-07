@@ -4,16 +4,6 @@ local datetime = require("miniobsidian.datetime")
 local path_policy = require("miniobsidian.path")
 local wikilink = require("miniobsidian.wikilink")
 
-local function read_file(path)
-  local file, err = io.open(path, "r")
-  if not file then
-    return nil, err
-  end
-  local content = file:read("*a")
-  file:close()
-  return content
-end
-
 local function resolve_template(core, template_id)
   local logical = template_id:gsub("%.md$", "") .. ".md"
   local safe, safe_err = path_policy.validate_logical(logical)
@@ -65,7 +55,7 @@ function M.resolve_today(opts)
     if not template_path then
       return nil, "Daily Note 模板无法解析: " .. tostring(template_err)
     end
-    source, template_err = read_file(template_path)
+    source, template_err = require("miniobsidian.fs").read(template_path)
     if not source then
       return nil, "Daily Note 模板无法读取: " .. tostring(template_err)
     end
@@ -107,7 +97,7 @@ function M.open_today(opts)
     return
   end
   if is_new then
-    core.invalidate_cache()
+    core.update_note_cache(plan.path)
     for _, warning in ipairs(plan.warnings) do
       core.notify(warning, vim.log.levels.WARN)
     end

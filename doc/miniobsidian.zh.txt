@@ -233,6 +233,7 @@ BMP 或 SVG；截图和浏览器图片输出 PNG/JPG/GIF。若名称已被任一
   core.validate_config(config)     -- string[]
   core.get_all_notes(force)        -- string[] 绝对路径
   core.invalidate_cache()
+  core.update_note_cache(path)
   core.get_cache_stamp()
   core.note_stem(path)
   core.in_vault(path)
@@ -277,6 +278,8 @@ after_note_open(path, opts)
 
 on_vault_switch(name, path)
     Vault 配置提交、缓存失效和 MiniObsidianVaultSwitch 触发后调用。
+
+用户回调异常会产生 WARN 通知，但不会中断插件流程。
 
 quick_switch() 和 search() 由 snacks 打开文件，不调用 after_note_open。需要处理
 picker 打开的文件时，应注册 BufEnter 并用 core.in_vault(path) 过滤。

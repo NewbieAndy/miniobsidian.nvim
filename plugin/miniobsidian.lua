@@ -201,9 +201,9 @@ vim.api.nvim_create_autocmd("User", {
       group = augroup,
       pattern = "*.md", -- 仅监听 Markdown 文件（通配符，不限于 vault 内）
       callback = function(ev)
-        -- 进一步过滤：只对 vault 内的文件刷新缓存（vault 外的 md 文件不影响补全列表）
+        -- 进一步过滤：只对 vault 内的文件增量更新缓存（vault 外的 md 文件不影响补全列表）
         if core.in_vault(vim.api.nvim_buf_get_name(ev.buf)) then
-          core.invalidate_cache()
+          core.update_note_cache(vim.api.nvim_buf_get_name(ev.buf))
         end
       end,
     })

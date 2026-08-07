@@ -36,3 +36,4 @@ jobs:
           repository: nvim-lua/plenary.nvim
           path: .deps/plenary.nvim
       - run: make test PLENARY_DIR="$GITHUB_WORKSPACE/.deps/plenary.nvim"
+      - run: make docs-check module-test-check

@@ -5,6 +5,7 @@
 --           其他所有子模块均通过 require("miniobsidian").config 读取配置。
 -- 依赖关系：无外部插件依赖；仅使用 Neovim 内置 API（vim.fn、vim.api）
 -- 对外 API：M.setup(opts)、M.get_all_notes(force)、M.invalidate_cache()、
+--           M.update_note_cache(path)、M.run_callback(name, callback, ...)、
 --           M.note_stem(path)、M.in_vault(path)
 -- ============================================================
 local M = {}
@@ -30,6 +31,7 @@ local M = {}
 ---@field note_id_func fun(title: string): string 将标题转为文件名 ID 的函数
 ---@field checkbox_states string[] checkbox 循环切换状态列表（如 { " ", "/", "x", "-" }）
 ---@field vault_path string 当前活跃 vault 的绝对路径（运行时内部字段，由 setup 自动派生，请勿手动设置）
+---@field on_vault_switch? fun(name: string, path: string) Vault 成功切换后的回调（可选）
 ---@field after_note_open? fun(path: string, opts: table) 笔记文件成功打开后的回调（可选）。插件不执行任何全局副作用，由用户决定是否切换根目录或刷新文件树
 
 -- ──────────────────────────────────────────────
@@ -183,6 +185,7 @@ end
 
 --- 缓存：存储上一次 globpath 扫描的结果（string[] 或 nil）
 local _cache = nil
+local _cache_lookup = nil
 
 --- 缓存时间戳：上次扫描时 os.time() 的值（秒级 Unix 时间戳）
 local _cache_time = 0
@@ -193,7 +196,7 @@ local _cache_stamp = 0
 --- 缓存有效期（秒）。设为 5 秒：
 --   • 补全触发非常频繁，避免每次按键都调用 globpath（磁盘 I/O）。
 --   • 5 秒足够短，不会让新建/删除的笔记长时间不可见。
---   • 写入文件时会主动调用 invalidate_cache()，正常情况几乎不会用到过期。
+--   • 插件写入时会增量更新缓存；外部变更最迟在 TTL 到期后通过完整扫描发现。
 local CACHE_TTL = 5
 
 -- ──────────────────────────────────────────────
@@ -243,6 +246,10 @@ function M.get_all_notes(force)
   end
 
   _cache = notes
+  _cache_lookup = {}
+  for _, path in ipairs(notes) do
+    _cache_lookup[path] = true
+  end
   _cache_time = now
   _cache_stamp = _cache_stamp + 1
   return _cache
@@ -253,8 +260,54 @@ end
 -- 副作用：将 _cache 置 nil，_cache_time 归零。
 function M.invalidate_cache()
   _cache = nil
+  _cache_lookup = nil
   _cache_time = 0
   _cache_stamp = _cache_stamp + 1
+end
+
+---增量更新单个 Markdown 路径，避免插件写入后立即重扫整个 Vault。
+---缓存尚未建立时只推进版本；下次 get_all_notes() 仍会执行首次完整扫描。
+---@param path string 绝对路径
+function M.update_note_cache(path)
+  if not _cache or not _cache_lookup then
+    _cache_stamp = _cache_stamp + 1
+    return
+  end
+
+  if type(path) ~= "string" or path:match("%.md$") == nil then
+    return
+  end
+  local resolved = require("miniobsidian.path").resolve(M.config.vault_path, path, { allow_absolute = true })
+  if not resolved then
+    return
+  end
+
+  -- resolve() 负责 Vault 边界校验；缓存键则沿用配置中的 Vault 路径形式，
+  -- 避免 macOS 上 /var 与 /private/var 等同一路径的别名造成重复或删除失效。
+  path = require("miniobsidian.path").join(M.config.vault_path, resolved.logical)
+  local exists = vim.fn.filereadable(path) == 1
+  local changed = false
+
+  if exists and not _cache_lookup[path] then
+    _cache[#_cache + 1] = path
+    table.sort(_cache)
+    _cache_lookup[path] = true
+    changed = true
+  elseif not exists and _cache_lookup[path] then
+    for index, cached in ipairs(_cache) do
+      if cached == path then
+        table.remove(_cache, index)
+        break
+      end
+    end
+    _cache_lookup[path] = nil
+    changed = true
+  end
+
+  if changed then
+    _cache_stamp = _cache_stamp + 1
+  end
+  _cache_time = os.time()
 end
 
 --- 返回当前笔记路径缓存版本（供 completion.lua 判断 items 缓存是否需要重建）。
@@ -299,6 +352,23 @@ function M.notify(msg, level)
   vim.notify("[miniobsidian] " .. msg, level or vim.log.levels.INFO)
 end
 
+---统一执行用户回调。异常不会中断插件流程，但会产生可诊断的 WARN 通知。
+---@param name string 回调配置项名称
+---@param callback? function
+---@param ... any
+---@return boolean ok
+---@return any result_or_error
+function M.run_callback(name, callback, ...)
+  if not callback then
+    return true, nil
+  end
+  local ok, result = pcall(callback, ...)
+  if not ok then
+    M.notify(name .. " 回调执行失败: " .. tostring(result), vim.log.levels.WARN)
+  end
+  return ok, result
+end
+
 --- 将字符串转义为合法的 YAML 双引号字符串值。
 -- 反斜杠和双引号需要转义，防止破坏 frontmatter 结构。
 ---@param s string 原始字符串
@@ -318,9 +388,7 @@ function M.after_note_open(path, opts)
   })
 
   local cb = M.config.after_note_open
-  if cb then
-    pcall(cb, path, opts)
-  end
+  M.run_callback("after_note_open", cb, path, opts)
 end
 
 --- 插件入口函数：合并用户配置、扫描 vault 列表并完成初始化。
