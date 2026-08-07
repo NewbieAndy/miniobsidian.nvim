@@ -49,4 +49,21 @@ function M.create_exclusive(path, content, mode)
   return true, nil
 end
 
+---Publish an existing file at a new path without replacing an existing target.
+---The source and target should be on the same filesystem. The caller owns source cleanup.
+---@param source string
+---@param target string
+---@return boolean|nil linked false means the target already exists
+---@return string|nil error
+function M.link_exclusive(source, target)
+  local linked, link_err = uv.fs_link(source, target)
+  if linked then
+    return true, nil
+  end
+  if is_exists_error(link_err) then
+    return false, nil
+  end
+  return nil, tostring(link_err)
+end
+
 return M

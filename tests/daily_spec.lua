@@ -24,6 +24,7 @@ describe("daily", function()
 
   it("resets Daily Notes fields to official defaults when config is absent", function()
     local config = require("miniobsidian.config_sync").read_vault_config(vault)
+    assert.equals("Notes", config.notes_subdir)
     assert.equals("", config.dailies_folder)
     assert.equals("%Y-%m-%d", config.daily_date_format)
     assert.equals("", config.daily_template)

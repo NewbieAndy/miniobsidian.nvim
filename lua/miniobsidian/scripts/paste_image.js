@@ -19,6 +19,7 @@
  *      BITMAP_FAILED  — 无法创建位图表示
  *      CONVERT_FAILED — 格式转换失败
  *      WRITE_FAILED   — 文件写入失败
+ *      FILE_EXISTS    — 目标文件已存在
  *      MISSING_PATH   — 未提供目标路径参数
  */
 
@@ -39,6 +40,13 @@ function run(argv) {
 
   const pb = $.NSPasteboard.generalPasteboard;
   const basePath = argv[0];
+  const fileManager = $.NSFileManager.defaultManager;
+
+  function ensureMissing(path) {
+    if (fileManager.fileExistsAtPath($(path))) {
+      throw new Error("FILE_EXISTS");
+    }
+  }
 
   // ── 路径 1：Finder 复制的文件（NSFilenamesPboardType）──────────────
   // 当用户在 Finder 中 Cmd+C 一个图片文件时，剪贴板包含文件路径列表，
@@ -57,6 +65,7 @@ function run(argv) {
     // jpeg → jpg 规范化，其余保留原始扩展名
     const normalExt = srcExt === "jpeg" ? "jpg" : srcExt;
     const outputPath = basePath + "." + normalExt;
+    ensureMissing(outputPath);
 
     // 用 NSData 逐字节复制，避免格式损失，也无需 NSError Ref 参数
     const srcURL = $.NSURL.fileURLWithPath($(srcPath));
@@ -117,6 +126,7 @@ function run(argv) {
   }
 
   const outputPath = basePath + "." + ext;
+  ensureMissing(outputPath);
   const url = $.NSURL.fileURLWithPath($(outputPath));
   if (!data.writeToURLAtomically(url, true)) {
     throw new Error("WRITE_FAILED");

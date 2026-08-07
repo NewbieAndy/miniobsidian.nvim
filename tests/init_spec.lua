@@ -68,4 +68,21 @@ describe("miniobsidian init", function()
     local errors = core.validate_config(config)
     assert.equals(2, #errors)
   end)
+
+  it("rejects unsafe configuration synchronized during initial setup", function()
+    local parent = vim.fn.tempname()
+    vim.fn.mkdir(parent .. "/Personal/.obsidian", "p")
+    vim.fn.writefile(
+      { '{"newFileLocation":"folder","newFileFolderPath":"../Outside"}' },
+      parent .. "/Personal/.obsidian/app.json"
+    )
+    local core = require("miniobsidian")
+
+    local ok, errors = core.setup({ vaults_parent = parent, auto_discover = false })
+    assert.is_false(ok)
+    assert.equals("", core.active_vault_name)
+    assert.equals("", core.config.vault_path)
+    assert.truthy(table.concat(errors, "\n"):find("notes_subdir", 1, true))
+    helpers.cleanup(parent)
+  end)
 end)

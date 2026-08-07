@@ -22,6 +22,31 @@ local IS_MACOS = vim.fn.has("mac") == 1
 -- 这样无论插件被安装在哪个路径都能正确定位脚本。
 local _M_DIR = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])")
 local PASTE_SCRIPT = _M_DIR .. "scripts/paste_image.js"
+local IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tiff", "bmp", "svg" }
+
+---为图片选择不会覆盖现有文件的名称。
+---@param directory string 附件目录绝对路径
+---@param requested string 已净化、不含扩展名的名称
+---@return string
+function M.unique_name(directory, requested)
+  local function available(name)
+    for _, ext in ipairs(IMAGE_EXTENSIONS) do
+      if vim.uv.fs_stat(path_policy.join(directory, name .. "." .. ext)) then
+        return false
+      end
+    end
+    return true
+  end
+
+  if available(requested) then
+    return requested
+  end
+  local suffix = 1
+  while not available(requested .. "-" .. suffix) do
+    suffix = suffix + 1
+  end
+  return requested .. "-" .. suffix
+end
 
 --- 计算从 from_dir 到 to_path 的相对路径（纯 Lua 实现，无外部依赖）。
 -- 算法：找最长公共目录前缀，用 "../" 向上回退，拼接目标剩余路径。
@@ -112,6 +137,7 @@ function M.paste_img(name)
     end
     local attach_dir = directory.path
     vim.fn.mkdir(attach_dir, "p")
+    img_name = M.unique_name(attach_dir, img_name)
 
     -- base_path 不含扩展名：JXA 脚本检测格式后追加正确后缀并返回
     local logical = directory.logical == "" and img_name or (directory.logical .. "/" .. img_name)
@@ -121,13 +147,14 @@ function M.paste_img(name)
       return
     end
     local base_path = target.path
+    local temp_base = path_policy.join(attach_dir, ".miniobsidian-paste-" .. tostring(vim.uv.hrtime()))
 
     -- ── 调用 osascript JXA 脚本 ────────────────────────────
     -- 使用列表形式传参，路径中的空格等特殊字符由 OS 进程 API 处理，无需 shell 转义。
     -- :wait() 同步等待（~120ms），对用户主动触发的粘贴操作完全可接受。
     local proc = vim
       .system(
-        { "osascript", "-l", "JavaScript", PASTE_SCRIPT, base_path },
+        { "osascript", "-l", "JavaScript", PASTE_SCRIPT, temp_base },
         { text = true } -- 确保 stdout/stderr 作为字符串返回
       )
       :wait()
@@ -137,6 +164,8 @@ function M.paste_img(name)
       local err = proc.stderr or ""
       if err:find("NO_IMAGE") then
         vim.notify("[miniobsidian] 剪贴板中没有图片（或格式不支持）", vim.log.levels.WARN)
+      elseif err:find("FILE_EXISTS") then
+        vim.notify("[miniobsidian] 图片目标刚被其他进程创建，请重试", vim.log.levels.WARN)
       elseif err:find("NOT_IMAGE_FILE") then
         vim.notify("[miniobsidian] 剪贴板中的文件不是图片格式", vim.log.levels.WARN)
       elseif err:find("WRITE_FAILED") then
@@ -159,6 +188,19 @@ function M.paste_img(name)
     local ext = ((proc.stdout or ""):match("^%s*(%a+)%s*$") or "png"):lower()
     local img_file = img_name .. "." .. ext
     local abs_path = base_path .. "." .. ext
+    local temp_path = temp_base .. "." .. ext
+
+    -- JXA 先写入同目录临时文件，再通过 hard link 排他发布。
+    -- hard link 在目标已存在时返回 EEXIST，因此即使发生并发竞争也不会覆盖原文件。
+    local published, publish_err = require("miniobsidian.fs").link_exclusive(temp_path, abs_path)
+    vim.uv.fs_unlink(temp_path)
+    if published == false then
+      vim.notify("[miniobsidian] 图片目标已存在，请重试: " .. abs_path, vim.log.levels.WARN)
+      return
+    elseif published == nil then
+      vim.notify("[miniobsidian] 图片发布失败: " .. tostring(publish_err), vim.log.levels.ERROR)
+      return
+    end
 
     -- ── 计算相对路径 ──────────────────────────────────────
     -- 相对路径可在 vault 移动位置后继续有效，与 Obsidian 桌面端行为一致。

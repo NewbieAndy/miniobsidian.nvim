@@ -150,6 +150,7 @@ end
 ---@return {notes_subdir?: string, dailies_folder?: string, daily_date_format?: string, daily_template?: string} 覆盖值表
 function M.read_vault_config(vault_path)
   local overrides = {
+    notes_subdir = "Notes",
     dailies_folder = "",
     daily_date_format = "%Y-%m-%d",
     daily_template = "",

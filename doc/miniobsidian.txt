@@ -4,121 +4,315 @@
 CONTENTS                                                        *miniobsidian*
 
 1. Introduction                                      |miniobsidian-introduction|
-2. Setup                                                    |miniobsidian-setup|
-3. Commands                                              |miniobsidian-commands|
-4. API                                                        |miniobsidian-api|
-5. Events                                                  |miniobsidian-events|
+2. Requirements and installation                    |miniobsidian-installation|
+3. Configuration                                           |miniobsidian-config|
+4. Commands                                              |miniobsidian-commands|
+5. Workflows                                            |miniobsidian-workflows|
+6. Lua API                                                    |miniobsidian-api|
+7. Callbacks and events                                  |miniobsidian-callbacks|
+8. Health                                                    |miniobsidian-health|
 
 ===============================================================================
 1. INTRODUCTION                                      *miniobsidian-introduction*
 
-miniobsidian.nvim provides Vault discovery, note creation, search, Wikilinks,
-templates, Daily Notes, checkboxes, and image paste. It is a standalone editor
-plugin and has no external CLI or Agent integration.
+miniobsidian.nvim provides Vault discovery and switching, note creation and search,
+Wikilinks, templates, Daily Notes, checkboxes, and macOS image paste. It is a
+standalone editor plugin with no external CLI or Agent integration.
 
-The plugin does not coordinate concurrent writes made by other applications.
-Neovim's native file-change behavior applies. Create operations do use
-no-replace semantics, so an existing target is never truncated.
+The plugin does not coordinate concurrent writes from other applications. Neovim's
+native file-change behavior applies. Plugin targets are restricted to the active
+Vault, and notes, templates, Daily Notes, and images use no-replace publication.
 
 ===============================================================================
-2. SETUP                                                    *miniobsidian-setup*
+2. REQUIREMENTS AND INSTALLATION                    *miniobsidian-installation*
 
+Required: Neovim >= 0.10.4.
+
+Optional:
+
+  snacks.nvim    quick switch and full-text search
+  blink.cmp      Wikilink and checkbox completion
+  ripgrep        full-text search
+  osascript      macOS image paste
+
+Minimal setup:
+>lua
+  require("miniobsidian").setup()
+<
+
+Zero-config setup reads Obsidian's official obsidian.json. Manual discovery:
 >lua
   require("miniobsidian").setup({
-    vaults_parent = "",
-    default_vault = "",
-    auto_discover = true,
-    sync_obsidian_config = true,
-    notes_subdir = "Notes",
-    dailies_folder = "",
-    daily_template = "",
-    daily_default_content = "",
-    templates_folder = "Templates",
-    attachments_folder = "Assets",
-    daily_date_format = "%Y-%m-%d",
-    picker_scope = "notes",
-    change_cwd_on_switch = false,
-    checkbox_states = { " ", "x" },
-    note_id_func = function(title)
-      return title:lower():gsub("%s+", "-")
-    end,
-    on_vault_switch = nil,
-    after_note_open = nil,
+    vaults_parent = "~/Documents/Obsidian",
+    default_vault = "Personal",
+    auto_discover = false,
   })
 <
 
-User values take precedence over settings read from .obsidian/app.json and
-.obsidian/daily-notes.json.
-
 ===============================================================================
-3. COMMANDS                                              *miniobsidian-commands*
+3. CONFIGURATION                                           *miniobsidian-config*
 
-                                                               *:ObsidianNew*
-:ObsidianNew[!] [title]
-    Create or open a note in notes_subdir.
+Defaults and meaning:
 
-                                                           *:ObsidianNewHere*
-:ObsidianNewHere
-    Create a note in the directory selected by a supported file explorer.
+  vaults_parent = ""
+      Parent directory containing Vaults. Expands ~ and environment variables.
 
-                                                        *:ObsidianSwitchVault*
-:ObsidianSwitchVault
-    Select the active Vault.
+  default_vault = ""
+      Initial Vault name. Missing names fall back to the first discovered entry.
 
-                                                            *:ObsidianSwitch*
-:ObsidianSwitch
-    Open the note picker.
+  auto_discover = true
+      Read official Obsidian configuration when vaults_parent is empty.
 
-                                                            *:ObsidianSearch*
-:ObsidianSearch [query]
-    Search Markdown content with snacks.nvim and ripgrep.
+  sync_obsidian_config = true
+      Read settings from the active Vault. The plugin never writes .obsidian.
 
-                                                          *:ObsidianTemplate*
-:ObsidianTemplate
-    Select and insert a template.
+  notes_subdir = "Notes"
+      Vault-relative new-note folder. Empty means the Vault root.
 
-                                                       *:ObsidianNewTemplate*
-:ObsidianNewTemplate [name]
-    Create or open a template without replacing an existing file.
+  dailies_folder = ""
+      Vault-relative Daily Note folder.
 
-                                                          *:ObsidianPasteImg*
-:ObsidianPasteImg [name]
-    Paste a clipboard image on macOS.
+  daily_template = ""
+      Vault-relative Daily template Note ID. The .md suffix is optional.
 
-                                                             *:ObsidianToday*
-:ObsidianToday[!]
-    Open or exclusively create today's Daily Note.
+  daily_default_content = ""
+      Content for a new Daily Note when no template is configured.
 
-                                                             *:ObsidianSetup*
-:ObsidianSetup
-    Initialize the plugin with defaults.
+  templates_folder = "Templates"
+      Vault-relative template folder.
 
-===============================================================================
-4. API                                                        *miniobsidian-api*
+  attachments_folder = "Assets"
+      Vault-relative image folder.
 
+  daily_date_format = "%Y-%m-%d"
+      Lua os.date format for Daily filenames and note frontmatter dates.
+
+  picker_scope = "notes"
+      "notes" searches notes_subdir; "vault" searches the complete Vault.
+
+  change_cwd_on_switch = false
+      Apply tab-local :tcd after a successful Vault switch.
+
+  checkbox_states = { " ", "x" }
+      Checkbox cycle and completion order.
+
+  note_id_func = <built-in CJK slug function>
+      Convert a title to a filename without .md. The default keeps ASCII
+      alphanumerics and CJK text, removes other punctuation, changes consecutive
+      whitespace to -, and lowercases ASCII.
+
+  on_vault_switch = nil
+      function(name, path), called after a successful Vault switch.
+
+  after_note_open = nil
+      function(path, opts), called after a direct plugin note open.
+
+vault_path is internal runtime state and must not be configured manually.
+
+Path options reject parent traversal, absolute paths, hidden segments, NUL, Windows
+ADS and device names, and segments ending in a dot or space.
+
+Synchronized configuration:
+
+  .obsidian/app.json
+      newFileLocation/newFileFolderPath -> notes_subdir
+
+  .obsidian/daily-notes.json
+      folder   -> dailies_folder
+      format   -> daily_date_format
+      template -> daily_template
+
+Precedence is explicit user configuration, active-Vault Obsidian settings, then
+plugin defaults. Synchronized fields are rebuilt on every switch. The full candidate
+configuration must validate before it is committed; unsafe settings leave the
+previous Vault active.
+
+setup(opts) returns true on success. Invalid configuration, no valid Vault, or unsafe
+synchronized settings return false, errors and do not fire MiniObsidianSetup.
+
+blink.cmp provider:
 >lua
-  require("miniobsidian.note").new_note(title?, opts?)
-  require("miniobsidian.note").new_note_here()
-  require("miniobsidian.note").quick_switch()
-  require("miniobsidian.note").search(query?)
-  require("miniobsidian.daily").open_today(opts?)
-  require("miniobsidian.template").insert()
-  require("miniobsidian.template").new_template(name?)
-  require("miniobsidian.vault").pick_and_switch()
-  require("miniobsidian.link").follow_link_or_toggle()
-  require("miniobsidian.checkbox").toggle()
+  opts.sources.providers.miniobsidian = {
+    name = "MiniObsidian",
+    module = "miniobsidian.completion",
+    score_offset = 50,
+  }
+  table.insert(opts.sources.default, "miniobsidian")
 <
 
 ===============================================================================
-5. EVENTS                                                  *miniobsidian-events*
+4. COMMANDS                                              *miniobsidian-commands*
+
+                                                               *:ObsidianNew*
+:ObsidianNew[!] [title]
+    Create or open a note in notes_subdir. A missing title opens an input prompt.
+    ! passes opts.switch_root=true to after_note_open.
+
+                                                           *:ObsidianNewHere*
+:ObsidianNewHere
+    Create in the current snacks explorer, neo-tree, nvim-tree, oil.nvim, or netrw
+    directory. Falls back to notes_subdir only when no explorer is detected; an
+    explicitly detected directory outside the Vault is rejected.
+
+                                                        *:ObsidianSwitchVault*
+:ObsidianSwitchVault
+    Select and switch the active Vault.
+
+                                                            *:ObsidianSwitch*
+:ObsidianSwitch
+    Fuzzy-find Markdown notes through snacks.nvim.
+
+                                                            *:ObsidianSearch*
+:ObsidianSearch [query]
+    Search Markdown through snacks.nvim and ripgrep.
+
+                                                          *:ObsidianTemplate*
+:ObsidianTemplate
+    Select a recursive template, render it, and insert below the cursor.
+
+                                                       *:ObsidianNewTemplate*
+:ObsidianNewTemplate [name]
+    Create or open a template without replacing an existing target.
+
+                                                          *:ObsidianPasteImg*
+:ObsidianPasteImg [name]
+    Paste a macOS clipboard image into attachments_folder and insert a relative
+    Markdown link. Collisions use an incremented name and exclusive publication.
+
+                                                             *:ObsidianToday*
+:ObsidianToday[!]
+    Open or exclusively create today's Daily Note. ! passes
+    opts.switch_root=true to after_note_open.
+
+                                                             *:ObsidianSetup*
+:ObsidianSetup
+    Call setup() with defaults, mainly for tests or use without a plugin manager.
+
+===============================================================================
+5. WORKFLOWS                                            *miniobsidian-workflows*
+
+WIKILINK                                                   *miniobsidian-wikilink*
+
+Navigation supports [[Note]], [[Folder/Note]], [[Note|Alias]], [[Note#Heading]],
+and [[Note#^block-id]]. Duplicate basenames require explicit selection. A missing
+qualified target can be created with its requested directory and filename.
+
+Current-document [[#Heading]] links are not supported. blink completion provides
+note targets only, not aliases, headings, or block IDs. Duplicate candidates insert
+qualified Vault-relative IDs; previews read the first ten lines.
+
+CHECKBOX                                                   *miniobsidian-checkbox*
+
+checkbox.toggle() cycles through checkbox_states. Plain -, *, and + list items are
+upgraded to the first state. checkbox.clear() restores a checkbox to a plain list
+item. Typing - [, * [, or + [ exposes every configured state through blink.
+
+TEMPLATES                                                   *miniobsidian-template*
+
+Variables are case-insensitive: {{date}}, {{time}}, {{title}}, {{filename}},
+{{yesterday}}, {{tomorrow}}, and {{date:FORMAT}}. Unknown ordinary variables remain
+unchanged and produce warnings.
+
+FORMAT supports YYYY, YY, MMMM, MMM, MM, DD, dddd, ddd, HH, hh, mm, ss, A, a,
+and [literal]. Unsupported tokens fail the render.
+
+DAILY NOTES                                               *miniobsidian-daily-note*
+
+The target is dailies_folder/os.date(daily_date_format).md. An existing file opens
+without reading its old template. A new file renders daily_template, or uses
+daily_default_content when no template is configured. Missing or ambiguous templates
+abort creation.
+
+IMAGE PASTE                                                    *miniobsidian-image*
+
+macOS only. Finder images preserve PNG, JPEG, GIF, WEBP, HEIC, HEIF, TIFF, BMP, or
+SVG. Screenshots and browser images become PNG/JPG/GIF. Existing names use name-1,
+name-2, and so on. A temporary file is published with no-replace semantics.
+
+===============================================================================
+6. LUA API                                                    *miniobsidian-api*
+
+Core:
+>lua
+  local core = require("miniobsidian")
+  core.setup(opts)                 -- true, or false, errors
+  core.default_config()            -- fresh defaults
+  core.validate_config(config)     -- string[]
+  core.get_all_notes(force)        -- absolute string[]
+  core.invalidate_cache()
+  core.get_cache_stamp()
+  core.note_stem(path)
+  core.in_vault(path)
+<
+
+Notes:
+>lua
+  local note = require("miniobsidian.note")
+  note.new_note(title?, opts?)
+  note.new_note_here()
+  note.new_note_in_dir(absolute_dir)
+  note.quick_switch()
+  note.search(query?)
+  note.follow_or_create(wikilink_or_parsed)
+<
+
+Other workflows:
+>lua
+  require("miniobsidian.vault").pick_and_switch()
+  require("miniobsidian.vault").do_switch({ name = name, path = path })
+  require("miniobsidian.daily").open_today(opts?)
+  require("miniobsidian.daily").resolve_today(opts?)
+  require("miniobsidian.template").insert()
+  require("miniobsidian.template").new_template(name?)
+  require("miniobsidian.link").link_at_cursor()
+  require("miniobsidian.link").follow_link_or_toggle()
+  require("miniobsidian.checkbox").toggle()
+  require("miniobsidian.checkbox").clear()
+  require("miniobsidian.image").paste_img(name?)
+<
+
+wikilink.*, config_sync.*, path.*, fs.*, image.resolve_for_snacks, and
+completion.new are lower-level integration helpers and may change more readily.
+
+===============================================================================
+7. CALLBACKS AND EVENTS                                  *miniobsidian-callbacks*
+
+after_note_open(path, opts)
+    Runs for new_note() (including an existing Note ID), creation after a missing
+    Wikilink, and Daily Note workflows. Existing-link navigation, templates, and
+    picker workflows do not call it. MiniObsidianNoteOpened fires first;
+    opts.switch_root comes from command !.
+
+on_vault_switch(name, path)
+    Runs after Vault configuration is committed, the cache is invalidated, and
+    MiniObsidianVaultSwitch fires.
+
+quick_switch() and search() let snacks open files and do not call after_note_open.
+Use BufEnter plus core.in_vault(path) for picker-opened notes.
 
 MiniObsidianSetup
-    Fired after setup finishes.
+    Fires after successful setup. No data.
 
 MiniObsidianVaultSwitch
-    Fired after switching Vault. Data: { name, path }.
+    Fires after a successful switch. data = { name, path }.
 
 MiniObsidianNoteOpened
-    Fired after a note is opened. Data: { path, opts }.
+    Fires after a direct plugin note open. data = { path, opts }.
+
+===============================================================================
+8. HEALTH                                                    *miniobsidian-health*
+
+Run:
+>vim
+  :checkhealth miniobsidian
+<
+
+Checks the Neovim version, snacks.nvim, blink.cmp, ripgrep, osascript,
+configuration validity, Vault discovery source, and the active Vault.
+
+Development verification:
+>sh
+  make ci
+<
 
 vim:tw=78:ts=8:noet:ft=help:norl:

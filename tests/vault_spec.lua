@@ -37,4 +37,47 @@ describe("vault", function()
     assert.equals(global_before, vim.fn.getcwd(-1, -1))
     vim.cmd("tcd " .. vim.fn.fnameescape(original))
   end)
+
+  it("rebuilds synchronized folders instead of leaking values across Vaults", function()
+    vim.fn.writefile({ '{"newFileLocation":"folder","newFileFolderPath":"Inbox"}' }, parent .. "/A/.obsidian/app.json")
+    local core = require("miniobsidian")
+    assert.is_true(core.setup({ vaults_parent = parent, auto_discover = false }))
+    assert.equals("Inbox", core.config.notes_subdir)
+
+    require("miniobsidian.vault").do_switch({ name = "B", path = parent .. "/B" })
+    assert.equals("B", core.active_vault_name)
+    assert.equals("Notes", core.config.notes_subdir)
+  end)
+
+  it("keeps the previous Vault active when synchronized configuration is unsafe", function()
+    vim.fn.writefile(
+      { '{"newFileLocation":"folder","newFileFolderPath":"../Outside"}' },
+      parent .. "/B/.obsidian/app.json"
+    )
+    local core = require("miniobsidian")
+    assert.is_true(core.setup({ vaults_parent = parent, auto_discover = false }))
+    local original_path = core.config.vault_path
+
+    require("miniobsidian.vault").do_switch({ name = "B", path = parent .. "/B" })
+    assert.equals("A", core.active_vault_name)
+    assert.equals(original_path, core.config.vault_path)
+    assert.equals("Notes", core.config.notes_subdir)
+  end)
+
+  it("filters stale entries returned by Obsidian auto-discovery", function()
+    local vault_module = require("miniobsidian.vault")
+    local previous = package.loaded["miniobsidian.config_sync"]
+    package.loaded["miniobsidian.config_sync"] = {
+      discover_vaults = function()
+        return { { name = "Missing", path = parent .. "/Missing" } }
+      end,
+    }
+    require("miniobsidian").config.auto_discover = true
+    vault_module.refresh_vaults()
+
+    assert.same({}, vault_module.list_vaults(""))
+
+    package.loaded["miniobsidian.config_sync"] = previous
+    vault_module.refresh_vaults()
+  end)
 end)

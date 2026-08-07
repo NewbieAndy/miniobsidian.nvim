@@ -32,4 +32,28 @@ describe("local file creation", function()
     assert.truthy(err)
     assert.equals(0, vim.fn.filereadable(path))
   end)
+
+  it("publishes a file without replacing an existing target", function()
+    local fs = require("miniobsidian.fs")
+    local source = vault .. "/Notes/source.tmp"
+    local target = vault .. "/Notes/target.png"
+    vim.fn.writefile({ "new" }, source)
+    vim.fn.writefile({ "old" }, target)
+
+    local linked, err = fs.link_exclusive(source, target)
+    assert.is_false(linked)
+    assert.is_nil(err)
+    assert.same({ "old" }, vim.fn.readfile(target))
+    assert.same({ "new" }, vim.fn.readfile(source))
+  end)
+
+  it("publishes a file atomically when the target is absent", function()
+    local fs = require("miniobsidian.fs")
+    local source = vault .. "/Notes/source.tmp"
+    local target = vault .. "/Notes/target.png"
+    vim.fn.writefile({ "new" }, source)
+
+    assert.is_true(fs.link_exclusive(source, target))
+    assert.same({ "new" }, vim.fn.readfile(target))
+  end)
 end)

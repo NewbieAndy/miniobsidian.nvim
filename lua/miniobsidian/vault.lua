@@ -12,6 +12,18 @@ local path_policy = require("miniobsidian.path")
 -- 调用 M.refresh_vaults() 或 setup() 可主动清除缓存。
 local _vaults_cache = nil
 
+local function valid_entry(entry)
+  if type(entry) ~= "table" or type(entry.path) ~= "string" or entry.path == "" then
+    return nil
+  end
+  local real = path_policy.realpath(entry.path)
+  if not real or vim.fn.isdirectory(path_policy.join(real, ".obsidian")) == 0 then
+    return nil
+  end
+  local name = type(entry.name) == "string" and entry.name ~= "" and entry.name or vim.fn.fnamemodify(real, ":t")
+  return { name = name, path = real }
+end
+
 --- 清除 vault 列表缓存，下次调用 list_vaults 时重新扫描磁盘。
 -- 在 vaults_parent 可能发生变化（如用户修改配置后重新 setup）时自动调用。
 function M.refresh_vaults()
@@ -42,7 +54,14 @@ function M.list_vaults(parent)
 
     local ok, config_sync = pcall(require, "miniobsidian.config_sync")
     if ok then
-      local vaults = config_sync.discover_vaults()
+      local discovered = config_sync.discover_vaults()
+      local vaults = {}
+      for _, entry in ipairs(discovered) do
+        local valid = valid_entry(entry)
+        if valid then
+          vaults[#vaults + 1] = valid
+        end
+      end
       if #vaults > 0 then
         _vaults_cache = vaults
         return vaults
@@ -64,9 +83,9 @@ function M.list_vaults(parent)
     if not name:match("^%.") then
       local vault_path = parent .. "/" .. name
       if vim.fn.isdirectory(vault_path) == 1 and vim.fn.isdirectory(vault_path .. "/.obsidian") == 1 then
-        local real = path_policy.realpath(vault_path)
-        if real then
-          table.insert(vaults, { name = name, path = real })
+        local valid = valid_entry({ name = name, path = vault_path })
+        if valid then
+          table.insert(vaults, valid)
         end
       end
     end
@@ -93,22 +112,15 @@ function M.do_switch(entry)
     vim.notify("[miniobsidian] 无法切换到无效 Vault: " .. tostring(entry.path), vim.log.levels.ERROR)
     return
   end
-  core.config.vault_path = real
+  local applied, errors = core.apply_vault_config(real)
+  if not applied then
+    for _, message in ipairs(errors) do
+      core.notify("Vault 配置无效: " .. message, vim.log.levels.ERROR)
+    end
+    return
+  end
   core.active_vault_name = entry.name
   core.invalidate_cache()
-
-  -- 同步 Obsidian vault 内配置（用户手动配置优先）
-  if core.config.sync_obsidian_config then
-    local ok, config_sync = pcall(require, "miniobsidian.config_sync")
-    if ok then
-      local overrides = config_sync.read_vault_config(real)
-      for key, value in pairs(overrides) do
-        if not core._user_config_keys or not core._user_config_keys[key] then
-          core.config[key] = value
-        end
-      end
-    end
-  end
 
   -- 默认不修改 cwd；显式开启时仅设置当前 tab，避免影响其他项目/tab。
   if core.config.change_cwd_on_switch then

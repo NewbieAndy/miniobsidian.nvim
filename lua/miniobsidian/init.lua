@@ -95,11 +95,57 @@ local function new_default_config()
   }
 end
 
+local VAULT_SYNC_KEYS = {
+  "notes_subdir",
+  "dailies_folder",
+  "daily_date_format",
+  "daily_template",
+}
+
 function M.default_config()
   return new_default_config()
 end
 
 M.config = new_default_config()
+
+---为目标 Vault 构造并验证完整配置，成功后再原子替换当前配置。
+---每次都先重置可由 Obsidian 同步的字段，避免切换 Vault 时沿用上一个 Vault 的值。
+---@param vault_path string 目标 Vault 的已解析绝对路径
+---@return boolean ok
+---@return string[] errors
+function M.apply_vault_config(vault_path)
+  local candidate = vim.deepcopy(M.config)
+  local defaults = new_default_config()
+
+  for _, key in ipairs(VAULT_SYNC_KEYS) do
+    if M._user_config_keys and M._user_config_keys[key] then
+      candidate[key] = M._user_config_values[key]
+    else
+      candidate[key] = defaults[key]
+    end
+  end
+  candidate.vault_path = vault_path
+
+  if candidate.sync_obsidian_config then
+    local ok, config_sync = pcall(require, "miniobsidian.config_sync")
+    if not ok then
+      return false, { "无法加载 Obsidian 配置同步模块: " .. tostring(config_sync) }
+    end
+    for key, value in pairs(config_sync.read_vault_config(vault_path)) do
+      if not M._user_config_keys or not M._user_config_keys[key] then
+        candidate[key] = value
+      end
+    end
+  end
+
+  local errors = M.validate_config(candidate)
+  if #errors > 0 then
+    return false, errors
+  end
+
+  M.config = candidate
+  return true, {}
+end
 
 ---@param config MiniObsidian.Config
 ---@return string[]
@@ -294,8 +340,10 @@ function M.setup(opts)
   -- 记录用户显式设置的配置 key，后续自动同步时跳过这些 key
   -- 确保用户手动值优先级始终高于自动发现/同步的值
   M._user_config_keys = {}
+  M._user_config_values = {}
   for k, _ in pairs(opts) do
     M._user_config_keys[k] = true
+    M._user_config_values[k] = vim.deepcopy(opts[k])
   end
 
   M.config = vim.tbl_deep_extend("force", new_default_config(), opts)
@@ -319,12 +367,14 @@ function M.setup(opts)
   local vaults = vault.list_vaults(M.config.vaults_parent)
 
   if #vaults == 0 then
+    local errors = { "未找到有效的 vault" }
     vim.notify(
       "[miniobsidian] 未找到有效的 vault。解决方法：\n"
         .. "  1. 在 Obsidian 客户端中新建或打开一个 vault\n"
         .. "  2. 手动配置 vaults_parent 指向 vault 的父目录",
       vim.log.levels.ERROR
     )
+    return false, errors
   else
     -- 默认使用稳定排序后的第一个 vault
     local target = vaults[1]
@@ -350,21 +400,14 @@ function M.setup(opts)
       end
     end
 
-    M.config.vault_path = target.path
-    M.active_vault_name = target.name
-
-    -- 同步 Obsidian vault 内配置（用户手动配置优先）
-    if M.config.sync_obsidian_config then
-      local ok, config_sync = pcall(require, "miniobsidian.config_sync")
-      if ok then
-        local overrides = config_sync.read_vault_config(target.path)
-        for key, value in pairs(overrides) do
-          if not M._user_config_keys[key] then
-            M.config[key] = value
-          end
-        end
+    local applied, apply_errors = M.apply_vault_config(target.path)
+    if not applied then
+      for _, message in ipairs(apply_errors) do
+        M.notify("Vault 配置无效: " .. message, vim.log.levels.ERROR)
       end
+      return false, apply_errors
     end
+    M.active_vault_name = target.name
   end
 
   -- 触发自定义 User 事件，通知 plugin/miniobsidian.lua 注册后续 autocmd。
