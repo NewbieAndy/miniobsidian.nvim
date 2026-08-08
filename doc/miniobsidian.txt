@@ -35,12 +35,35 @@ Optional:
   ripgrep        full-text search
   osascript      macOS image paste
 
+Vault and template selection fall back to vim.ui.select. Without snacks.nvim,
+only ObsidianSwitch and ObsidianSearch are unavailable. Without ripgrep, only
+full-text search is unavailable.
+
+lazy.nvim plugin specification:
+>lua
+  {
+    "andy-neoaira/miniobsidian.nvim",
+    ft = "markdown",
+    cmd = {
+      "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault",
+      "ObsidianSwitch", "ObsidianSearch", "ObsidianTemplate",
+      "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
+      "ObsidianSetup",
+    },
+    config = function()
+      require("miniobsidian").setup()
+    end,
+  }
+<
+
 Minimal setup:
 >lua
   require("miniobsidian").setup()
 <
 
-Zero-config setup reads Obsidian's official obsidian.json. Manual discovery:
+Zero-config setup reads Obsidian's official obsidian.json, ignoring missing
+entries and paths without .obsidian/. Manual discovery scans only direct
+children of vaults_parent that contain .obsidian/:
 >lua
   require("miniobsidian").setup({
     vaults_parent = "~/Documents/Obsidian",
@@ -58,7 +81,8 @@ Defaults and meaning:
       Parent directory containing Vaults. Expands ~ and environment variables.
 
   default_vault = ""
-      Initial Vault name. Missing names fall back to the first discovered entry.
+      Initial Vault name. Missing names fall back to the first result. During
+      automatic discovery, an Obsidian-marked open Vault is prioritized.
 
   auto_discover = true
       Read official Obsidian configuration when vaults_parent is empty.
@@ -109,26 +133,33 @@ Defaults and meaning:
 
 vault_path is internal runtime state and must not be configured manually.
 
-Path options reject parent traversal, absolute paths, hidden segments, NUL, Windows
-ADS and device names, and segments ending in a dot or space.
+Directory options reject parent traversal, absolute paths, hidden segments,
+NUL, Windows ADS and device names, and segments ending in a dot or space.
+daily_template receives the same Vault-boundary check when a Daily Note is
+resolved.
 
 Synchronized configuration:
 
   .obsidian/app.json
-      newFileLocation/newFileFolderPath -> notes_subdir
+      newFileLocation="root" -> notes_subdir=""
+      newFileLocation="folder" plus newFileFolderPath -> notes_subdir
 
   .obsidian/daily-notes.json
       folder   -> dailies_folder
-      format   -> daily_date_format
+      supported Moment format -> Lua daily_date_format
       template -> daily_template
 
 Precedence is explicit user configuration, active-Vault Obsidian settings, then
-plugin defaults. Synchronized fields are rebuilt on every switch. The full candidate
-configuration must validate before it is committed; unsafe settings leave the
-previous Vault active.
+plugin defaults. Synchronized fields are rebuilt on every switch. Directory
+fields validate before a runtime switch is committed; unsafe directories leave
+the previous Vault active. Unsupported Moment tokens are not synchronized. A
+missing, ambiguous, or unsafe daily_template aborts Daily Note creation later.
 
-setup(opts) returns true on success. Invalid configuration, no valid Vault, or unsafe
-synchronized settings return false, errors and do not fire MiniObsidianSetup.
+setup(opts) returns true on success. Invalid configuration, no valid Vault, or a
+synchronized directory that fails validation returns false, errors and does not
+fire MiniObsidianSetup.
+Calling setup() again resets runtime configuration and caches before discovery;
+unlike a runtime ObsidianSwitchVault, failure need not preserve the old state.
 
 blink.cmp provider:
 >lua
@@ -160,11 +191,11 @@ blink.cmp provider:
 
                                                             *:ObsidianSwitch*
 :ObsidianSwitch
-    Fuzzy-find Markdown notes through snacks.nvim.
+    Fuzzy-find Markdown notes within picker_scope through snacks.nvim.
 
                                                             *:ObsidianSearch*
 :ObsidianSearch [query]
-    Search Markdown through snacks.nvim and ripgrep.
+    Search Markdown within picker_scope through snacks.nvim and ripgrep.
 
                                                           *:ObsidianTemplate*
 :ObsidianTemplate
@@ -194,12 +225,18 @@ blink.cmp provider:
 WIKILINK                                                   *miniobsidian-wikilink*
 
 Navigation supports [[Note]], [[Folder/Note]], [[Note|Alias]], [[Note#Heading]],
-and [[Note#^block-id]]. Duplicate basenames require explicit selection. A missing
-qualified target can be created with its requested directory and filename.
+and [[Note#^block-id]]. Duplicate basenames require explicit selection. After
+confirmation, a missing target is created relative to the Vault: [[Folder/Note]]
+becomes Folder/Note.md, while bare [[Note]] is created at the Vault root rather
+than in notes_subdir.
 
 Current-document [[#Heading]] links are not supported. blink completion provides
 note targets only, not aliases, headings, or block IDs. Duplicate candidates insert
 qualified Vault-relative IDs; previews read the first ten lines.
+
+Heading lookup matches visible heading text case-insensitively and recognizes -1,
+-2, and later duplicate suffixes. It is not a complete Obsidian anchor-slug
+implementation. Block IDs match only at the end of a line.
 
 CHECKBOX                                                   *miniobsidian-checkbox*
 
@@ -215,6 +252,10 @@ unchanged and produce warnings.
 
 FORMAT supports YYYY, YY, MMMM, MMM, MM, DD, dddd, ddd, HH, hh, mm, ss, A, a,
 and [literal]. Unsupported tokens fail the render.
+
+An explicitly configured daily_date_format uses Lua os.date syntax. An
+Obsidian Moment format is applied only when all tokens belong to the supported
+subset above.
 
 DAILY NOTES                                               *miniobsidian-daily-note*
 
@@ -249,28 +290,36 @@ Core:
 Notes:
 >lua
   local note = require("miniobsidian.note")
-  note.new_note(title?, opts?)
+  note.new_note()                  -- interactive title prompt
+  note.new_note("Title", { switch_root = true })
   note.new_note_here()
   note.new_note_in_dir(absolute_dir)
   note.quick_switch()
-  note.search(query?)
+  note.search()
+  note.search("query")
   note.follow_or_create(wikilink_or_parsed)
 <
 
 Other workflows:
 >lua
   require("miniobsidian.vault").pick_and_switch()
-  require("miniobsidian.vault").do_switch({ name = name, path = path })
-  require("miniobsidian.daily").open_today(opts?)
-  require("miniobsidian.daily").resolve_today(opts?)
+  require("miniobsidian.vault").do_switch({
+    name = "Personal", path = "/abs/vault",
+  })
+  require("miniobsidian.daily").open_today()
+  require("miniobsidian.daily").resolve_today()
   require("miniobsidian.template").insert()
-  require("miniobsidian.template").new_template(name?)
+  require("miniobsidian.template").new_template()
   require("miniobsidian.link").link_at_cursor()
   require("miniobsidian.link").follow_link_or_toggle()
   require("miniobsidian.checkbox").toggle()
   require("miniobsidian.checkbox").clear()
-  require("miniobsidian.image").paste_img(name?)
+  require("miniobsidian.image").paste_img()
 <
+
+No-argument calls use interactive input or defaults. resolve_today() is a
+read-only planning API returning plan, nil or nil, error; it neither creates nor
+opens a file.
 
 wikilink.*, config_sync.*, path.*, fs.*, image.resolve_for_snacks, and
 completion.new are lower-level integration helpers and may change more readily.
@@ -286,7 +335,8 @@ after_note_open(path, opts)
 
 on_vault_switch(name, path)
     Runs after Vault configuration is committed, the cache is invalidated, and
-    MiniObsidianVaultSwitch fires.
+    MiniObsidianVaultSwitch fires. Initial setup() does not fire this event or
+    callback. change_cwd_on_switch also applies only to runtime switches.
 
 User callback failures produce WARN notifications without interrupting plugin flow.
 
@@ -317,5 +367,8 @@ Development verification:
 >sh
   make ci
 <
+
+Full verification requires stylua, selene, and plenary.nvim. Override the
+Makefile defaults with NVIM and PLENARY_DIR when needed.
 
 vim:tw=78:ts=8:noet:ft=help:norl:

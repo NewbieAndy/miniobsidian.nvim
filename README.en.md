@@ -38,13 +38,15 @@ and reports I/O failures.
 ## Requirements
 
 - Neovim >= 0.10.4
-- `snacks.nvim` for switching and search, optional
+- `snacks.nvim` for note switching and search, optional
 - `blink.cmp` for Wikilink and checkbox completion, optional
 - `ripgrep` for full-text search, optional
 - `osascript` for image paste, macOS only
 
 Core Vault, note, template, Daily Note, link navigation, and checkbox workflows remain
-available without the optional dependencies.
+available without optional dependencies. Vault and template selectors fall back to
+`vim.ui.select`. Without `snacks.nvim`, only `ObsidianSwitch` and `ObsidianSearch`
+are unavailable; without ripgrep, only full-text search is unavailable.
 
 ## Installation
 
@@ -72,8 +74,9 @@ lazy.nvim example:
 }
 ```
 
-Zero-config setup discovers Vaults from Obsidian's official `obsidian.json`. Manual
-discovery example:
+Zero-config setup discovers Vaults from Obsidian's official `obsidian.json`, ignoring
+missing entries and paths without `.obsidian/`. With manual discovery, only direct
+children of `vaults_parent` that contain `.obsidian/` are treated as Vaults:
 
 ```lua
 require("miniobsidian").setup({
@@ -88,7 +91,7 @@ require("miniobsidian").setup({
 | Option | Default | Description |
 |---|---|---|
 | `vaults_parent` | `""` | Parent directory containing Vaults; expands `~` and environment variables |
-| `default_vault` | `""` | Initial Vault name; falls back to the first discovered entry |
+| `default_vault` | `""` | Initial Vault name; falls back to the first result; an Obsidian-marked open Vault is prioritized during automatic discovery |
 | `auto_discover` | `true` | Read official Obsidian configuration when no parent is set |
 | `sync_obsidian_config` | `true` | Read settings from the active Vault; never writes `.obsidian` |
 | `notes_subdir` | `"Notes"` | Vault-relative new-note folder; empty means Vault root |
@@ -125,29 +128,35 @@ require("miniobsidian").setup({
 })
 ```
 
-Path options must be safe Vault-relative paths. Parent traversal, absolute paths,
-hidden segments, NUL, Windows ADS and device names, and trailing dots/spaces are
-rejected.
+Directory options must be safe Vault-relative paths. Parent traversal, absolute
+paths, hidden segments, NUL, Windows ADS and device names, and trailing dots/spaces
+are rejected. `daily_template` receives the same Vault-boundary check when a Daily
+Note is resolved.
 
 ### Obsidian configuration synchronization
 
 With `sync_obsidian_config=true`, the plugin reads only:
 
 - `.obsidian/app.json`
-  - `newFileLocation` / `newFileFolderPath` → `notes_subdir`
+  - `newFileLocation="root"` → `notes_subdir=""`
+  - `newFileLocation="folder"` + `newFileFolderPath` → `notes_subdir`
 - `.obsidian/daily-notes.json`
   - `folder` → `dailies_folder`
-  - `format` → `daily_date_format`
+  - supported Moment `format` → Lua `daily_date_format`
   - `template` → `daily_template`
 
 Precedence is explicit user configuration, then the active Vault's Obsidian settings,
 then plugin defaults. Synchronized fields are rebuilt on every switch, so values do
-not leak between Vaults. The candidate configuration is fully validated before the
-active Vault changes; unsafe settings leave the previous Vault active.
+not leak between Vaults. Synchronized directory fields are validated before the
+active Vault changes; an unsafe directory leaves the previous Vault active.
+Unsupported Moment tokens are not synchronized. A missing, ambiguous, or unsafe
+`daily_template` aborts Daily Note creation when that workflow runs.
 
-`setup(opts)` returns `true` on success. Invalid configuration, no valid Vault, or
-unsafe synchronized settings return `false, errors` and do not fire
-`MiniObsidianSetup`.
+`setup(opts)` returns `true` on success. Invalid configuration, no valid Vault, or a
+synchronized directory that fails validation returns `false, errors` and does not
+fire `MiniObsidianSetup`. Calling `setup()` again resets runtime configuration and
+caches before discovery; unlike a runtime `ObsidianSwitchVault`, failure is not
+guaranteed to preserve the old state.
 
 ## blink.cmp completion
 
@@ -181,8 +190,8 @@ order.
 | `:ObsidianNew[!] [title]` | Create or open a note in `notes_subdir`; `!` passes `switch_root=true` |
 | `:ObsidianNewHere` | Create in the selected file-tree directory, falling back to `notes_subdir` when no explorer is detected |
 | `:ObsidianSwitchVault` | Select the active Vault |
-| `:ObsidianSwitch` | Fuzzy-find Markdown notes through snacks |
-| `:ObsidianSearch [query]` | Search Markdown through snacks and ripgrep |
+| `:ObsidianSwitch` | Fuzzy-find Markdown notes within `picker_scope` through snacks |
+| `:ObsidianSearch [query]` | Search Markdown within `picker_scope` through snacks and ripgrep |
 | `:ObsidianTemplate` | Select, render, and insert a recursive template |
 | `:ObsidianNewTemplate [name]` | Create or open a template without replacing it |
 | `:ObsidianPasteImg [name]` | Paste an image on macOS and insert a relative Markdown link |
@@ -204,10 +213,15 @@ Navigation supports:
 | `[[Note#Heading]]` | Open the note and locate the heading |
 | `[[Note#^block-id]]` | Open the note and locate an end-of-line block ID |
 
-Duplicate basenames require explicit selection. A missing qualified target can be
-created with the requested directory and filename after confirmation. Current-document
-links such as `[[#Heading]]` are not supported. Completion provides note targets only;
-it does not complete aliases, headings, or block IDs.
+Duplicate basenames require explicit selection. After confirmation, a missing target
+is created relative to the Vault: `[[Folder/Note]]` becomes `Folder/Note.md`, while a
+bare `[[Note]]` is created at the Vault root rather than in `notes_subdir`.
+Current-document links such as `[[#Heading]]` are not supported. Completion provides
+note targets only; it does not complete aliases, headings, or block IDs.
+
+Heading lookup matches visible heading text case-insensitively and supports `-1`,
+`-2`, and later suffixes for duplicate headings; it is not a complete implementation
+of Obsidian's anchor slug algorithm. Block IDs match only at the end of a line.
 
 ```lua
 vim.keymap.set("n", "<CR>", function()
@@ -220,6 +234,11 @@ end)
 `checkbox.toggle()` cycles through `checkbox_states`. Plain `- item`, `* item`, and
 `+ item` lines are upgraded to the first state. `checkbox.clear()` restores a checkbox
 to a plain list item.
+
+```lua
+vim.keymap.set("n", "<leader>nt", function() require("miniobsidian.checkbox").toggle() end)
+vim.keymap.set("n", "<leader>nc", function() require("miniobsidian.checkbox").clear() end)
+```
 
 ## Templates and Daily Notes
 
@@ -236,6 +255,9 @@ Template variables are case-insensitive:
 `FORMAT` supports `YYYY`, `YY`, `MMMM`, `MMM`, `MM`, `DD`, `dddd`, `ddd`, `HH`,
 `hh`, `mm`, `ss`, `A`, `a`, and `[literal]`. Unsupported tokens fail the render;
 unknown ordinary variables remain unchanged and produce warnings.
+
+An explicitly configured `daily_date_format` uses Lua `os.date` syntax. An Obsidian
+Moment format is applied only when every token belongs to the supported subset above.
 
 The Daily target is `dailies_folder/os.date(daily_date_format).md`. An existing file
 opens without reading its former template. A new file renders `daily_template`, or
@@ -273,7 +295,8 @@ require("miniobsidian").setup({
   comes from command `!`. The
   `MiniObsidianNoteOpened` event fires first.
 - `on_vault_switch(name, path)` runs after configuration is committed, the note cache
-  is invalidated, and `MiniObsidianVaultSwitch` fires.
+  is invalidated, and `MiniObsidianVaultSwitch` fires. Initial `setup()` does not fire
+  this event or callback; `change_cwd_on_switch` also applies only to runtime switches.
 
 `quick_switch()` and `search()` let snacks open files and therefore do not invoke
 `after_note_open`. Use `BufEnter` for picker-opened notes:
@@ -303,39 +326,58 @@ Common public API:
 
 ```lua
 local core = require("miniobsidian")
-core.setup(opts)                 -- true, or false, errors
+core.setup({})                   -- true, or false, errors
 core.default_config()
 core.validate_config(config)
 core.get_all_notes(force)
 core.invalidate_cache()
 core.update_note_cache(path)     -- single-path update after a plugin write
+core.get_cache_stamp()
+core.note_stem(path)
 core.in_vault(path)
 
 local note = require("miniobsidian.note")
-note.new_note(title?, opts?)
+note.new_note()                  -- interactive title prompt
+note.new_note("Title", { switch_root = true })
 note.new_note_here()
 note.new_note_in_dir(absolute_dir)
 note.quick_switch()
-note.search(query?)
+note.search()
+note.search("query")
 note.follow_or_create(wikilink_or_parsed)
 
 require("miniobsidian.vault").pick_and_switch()
-require("miniobsidian.vault").do_switch({ name = name, path = path })
-require("miniobsidian.daily").open_today(opts?)
-require("miniobsidian.daily").resolve_today(opts?)
+require("miniobsidian.vault").do_switch({ name = "Personal", path = "/abs/vault" })
+require("miniobsidian.daily").open_today()
+require("miniobsidian.daily").resolve_today()
 require("miniobsidian.template").insert()
-require("miniobsidian.template").new_template(name?)
+require("miniobsidian.template").new_template()
+require("miniobsidian.link").link_at_cursor()
 require("miniobsidian.link").follow_link_or_toggle()
 require("miniobsidian.checkbox").toggle()
 require("miniobsidian.checkbox").clear()
-require("miniobsidian.image").paste_img(name?)
+require("miniobsidian.image").paste_img()
 ```
+
+The no-argument calls above use interactive input or defaults. `resolve_today()` is a
+read-only planning API returning `plan, nil` or `nil, error`; it does not create or
+open a file.
 
 Lower-level integration helpers may change more readily: `wikilink.*`,
 `config_sync.*`, `path.*`, `fs.*`, `image.resolve_for_snacks`, and `completion.new`.
 
 User callback failures are isolated and reported at WARN level; they do not interrupt
 note-open or Vault-switch workflows.
+
+## Suggested keymaps
+
+```lua
+vim.keymap.set("n", "<leader>nn", function() require("miniobsidian.note").new_note() end)
+vim.keymap.set("n", "<leader>no", function() require("miniobsidian.note").quick_switch() end)
+vim.keymap.set("n", "<leader>ns", function() require("miniobsidian.note").search() end)
+vim.keymap.set("n", "<leader>nd", function() require("miniobsidian.daily").open_today() end)
+vim.keymap.set("n", "<leader>np", function() require("miniobsidian.image").paste_img() end)
+```
 
 The plugin defines no keymaps.
 
@@ -353,6 +395,9 @@ make ci
 
 Health checks cover the Neovim version, optional dependencies, configuration validity,
 Vault discovery source, and the active Vault.
+
+Full development verification also requires `stylua`, `selene`, and `plenary.nvim`;
+override the Makefile defaults with `NVIM` and `PLENARY_DIR` when needed.
 
 ## License
 

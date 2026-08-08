@@ -34,12 +34,34 @@ Neovim 原生行为。插件自身限制所有目标位于当前 Vault 内，并
   ripgrep        全文搜索
   osascript      macOS 图片粘贴
 
+Vault 和模板选择会回退到 vim.ui.select。缺少 snacks.nvim 时只有
+ObsidianSwitch、ObsidianSearch 不可用；缺少 ripgrep 时只有全文搜索不可用。
+
+lazy.nvim 插件配置：
+>lua
+  {
+    "andy-neoaira/miniobsidian.nvim",
+    ft = "markdown",
+    cmd = {
+      "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault",
+      "ObsidianSwitch", "ObsidianSearch", "ObsidianTemplate",
+      "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
+      "ObsidianSetup",
+    },
+    config = function()
+      require("miniobsidian").setup()
+    end,
+  }
+<
+
 最小配置：
 >lua
   require("miniobsidian").setup()
 <
 
-默认从 Obsidian 官方 obsidian.json 自动发现 Vault。手动发现：
+默认从 Obsidian 官方 obsidian.json 自动发现 Vault，并忽略不存在或不含
+.obsidian/ 的条目。手动发现只扫描 vaults_parent 的直属子目录，且目录必须
+包含 .obsidian/：
 >lua
   require("miniobsidian").setup({
     vaults_parent = "~/Documents/Obsidian",
@@ -57,7 +79,8 @@ Neovim 原生行为。插件自身限制所有目标位于当前 Vault 内，并
       Vault 父目录；支持 ~ 和环境变量展开。为空时使用自动发现。
 
   default_vault = ""
-      初始 Vault 名；为空或找不到时使用发现列表的第一个。
+      初始 Vault 名；为空或找不到时使用发现结果首项。自动发现时 Obsidian
+      标记为打开的 Vault 优先。
 
   auto_discover = true
       vaults_parent 为空时读取 Obsidian 官方配置。
@@ -107,24 +130,30 @@ Neovim 原生行为。插件自身限制所有目标位于当前 Vault 内，并
 
 vault_path 是运行时内部字段，不应手动配置。
 
-路径配置拒绝父目录穿越、绝对路径、隐藏目录、NUL、Windows ADS、保留设备名
-和以点或空格结尾的路径段。
+目录配置拒绝父目录穿越、绝对路径、隐藏目录、NUL、Windows ADS、保留设备名
+和以点或空格结尾的路径段。daily_template 会在解析 Daily Note 时执行相同的
+Vault 边界检查。
 
 配置同步：
 
   .obsidian/app.json
-      newFileLocation/newFileFolderPath -> notes_subdir
+      newFileLocation="root" -> notes_subdir=""
+      newFileLocation="folder" 加 newFileFolderPath -> notes_subdir
 
   .obsidian/daily-notes.json
       folder   -> dailies_folder
-      format   -> daily_date_format
+      支持的 Moment format -> Lua daily_date_format
       template -> daily_template
 
 优先级：用户显式配置 > 当前 Vault 官方配置 > 插件默认值。切换 Vault 时同步
-字段会完整重建，且候选配置整体校验成功后才提交；非法配置会保留原 Vault。
+字段会完整重建；目录字段校验成功后才提交，非法目录会保留原 Vault。不支持的
+Moment token 不会同步；daily_template 缺失、歧义或路径不安全时，会在后续
+Daily Note 创建前中止操作。
 
-setup(opts) 成功返回 true。配置非法、没有有效 Vault 或同步配置非法时返回
-false, errors，并且不会触发 MiniObsidianSetup。
+setup(opts) 成功返回 true。配置非法、没有有效 Vault 或已校验的同步目录非法时
+返回 false, errors，并且不会触发 MiniObsidianSetup。
+再次调用 setup() 会先重置运行时配置和缓存；它与运行中的
+ObsidianSwitchVault 不同，失败时不保证保留旧状态。
 
 blink.cmp provider：
 >lua
@@ -156,11 +185,11 @@ blink.cmp provider：
 
                                       *miniobsidian-zh-command-switch*
 :ObsidianSwitch
-    使用 snacks.nvim 模糊查找 Markdown 笔记。
+    在 picker_scope 范围内使用 snacks.nvim 模糊查找 Markdown 笔记。
 
                                       *miniobsidian-zh-command-search*
 :ObsidianSearch [关键词]
-    使用 snacks.nvim 和 ripgrep 全文搜索 Markdown。
+    在 picker_scope 范围内使用 snacks.nvim 和 ripgrep 全文搜索 Markdown。
 
                                     *miniobsidian-zh-command-template*
 :ObsidianTemplate
@@ -190,11 +219,15 @@ blink.cmp provider：
 WIKILINK                                             *miniobsidian-zh-wikilink*
 
 导航支持 [[Note]]、[[Folder/Note]]、[[Note|Alias]]、[[Note#Heading]] 和
-[[Note#^block-id]]。同 basename 多篇笔记时要求选择；缺失的限定路径目标可在
-确认后按原目录和文件名创建。
+[[Note#^block-id]]。同 basename 多篇笔记时要求选择。缺失目标确认后按 Vault
+相对位置创建：[[Folder/Note]] 创建 Folder/Note.md，裸 [[Note]] 创建到 Vault
+根目录，而不是 notes_subdir。
 
 当前不支持当前文档内部链接 [[#Heading]]。blink 补全只提供笔记目标，不补全
 alias、heading 或 block ID。同名候选插入 Vault 相对限定路径，预览读取前 10 行。
+
+Heading 按可见标题文本做大小写不敏感匹配，并识别重复标题的 -1、-2 等后缀；
+这不是完整的 Obsidian anchor slug 实现。Block ID 只匹配行末的 ^block-id。
 
 CHECKBOX                                             *miniobsidian-zh-checkbox*
 
@@ -209,6 +242,9 @@ checkbox.toggle() 按 checkbox_states 循环；普通 -、*、+ 列表项会升�
 
 FORMAT 支持 YYYY、YY、MMMM、MMM、MM、DD、dddd、ddd、HH、hh、mm、ss、
 A、a 和 [literal]。不支持的 token 会使渲染失败。
+
+显式配置的 daily_date_format 使用 Lua os.date 语法；从 Obsidian 同步的 Moment
+格式只有全部 token 属于上述子集时才会应用。
 
 DAILY NOTE                                        *miniobsidian-zh-daily-note*
 
@@ -242,28 +278,35 @@ BMP 或 SVG；截图和浏览器图片输出 PNG/JPG/GIF。若名称已被任一
 笔记：
 >lua
   local note = require("miniobsidian.note")
-  note.new_note(title?, opts?)
+  note.new_note()                  -- 交互输入标题
+  note.new_note("标题", { switch_root = true })
   note.new_note_here()
   note.new_note_in_dir(absolute_dir)
   note.quick_switch()
-  note.search(query?)
+  note.search()
+  note.search("关键词")
   note.follow_or_create(wikilink_or_parsed)
 <
 
 其他工作流：
 >lua
   require("miniobsidian.vault").pick_and_switch()
-  require("miniobsidian.vault").do_switch({ name = name, path = path })
-  require("miniobsidian.daily").open_today(opts?)
-  require("miniobsidian.daily").resolve_today(opts?)
+  require("miniobsidian.vault").do_switch({
+    name = "Personal", path = "/abs/vault",
+  })
+  require("miniobsidian.daily").open_today()
+  require("miniobsidian.daily").resolve_today()
   require("miniobsidian.template").insert()
-  require("miniobsidian.template").new_template(name?)
+  require("miniobsidian.template").new_template()
   require("miniobsidian.link").link_at_cursor()
   require("miniobsidian.link").follow_link_or_toggle()
   require("miniobsidian.checkbox").toggle()
   require("miniobsidian.checkbox").clear()
-  require("miniobsidian.image").paste_img(name?)
+  require("miniobsidian.image").paste_img()
 <
+
+上述无参调用使用交互输入或默认值。resolve_today() 是只读规划接口，返回
+plan, nil 或 nil, error，不创建也不打开文件。
 
 wikilink.*、config_sync.*、path.*、fs.*、image.resolve_for_snacks 和
 completion.new 主要是底层集成接口，稳定性低于上述用户工作流 API。
@@ -277,7 +320,8 @@ after_note_open(path, opts)
     MiniObsidianNoteOpened 先触发。opts.switch_root 来自命令的 !。
 
 on_vault_switch(name, path)
-    Vault 配置提交、缓存失效和 MiniObsidianVaultSwitch 触发后调用。
+    Vault 配置提交、缓存失效和 MiniObsidianVaultSwitch 触发后调用。初始
+    setup() 不触发该事件或回调；change_cwd_on_switch 也只作用于运行时切换。
 
 用户回调异常会产生 WARN 通知，但不会中断插件流程。
 
@@ -308,5 +352,8 @@ Vault 发现来源和当前活跃 Vault。
 >sh
   make ci
 <
+
+完整校验需要 stylua、selene 和 plenary.nvim；必要时可通过 NVIM 与
+PLENARY_DIR 覆盖 Makefile 默认路径。
 
 vim:tw=78:ts=8:noet:ft=help:norl:
