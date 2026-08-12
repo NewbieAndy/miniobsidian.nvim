@@ -36,6 +36,7 @@ describe("explorer adapters", function()
         end,
       },
     }
+    assert.same({ path = vault .. "/Notes/Sub", type = "directory" }, require("miniobsidian.explorer").current_entry())
     assert.equals(vault .. "/Notes/Sub", require("miniobsidian.explorer").current_dir())
   end)
 
@@ -52,6 +53,7 @@ describe("explorer adapters", function()
         }
       end,
     }
+    assert.same({ path = vault .. "/Notes/a.md", type = "file" }, require("miniobsidian.explorer").current_entry())
     assert.equals(vault .. "/Notes", require("miniobsidian.explorer").current_dir())
   end)
 
@@ -64,6 +66,7 @@ describe("explorer adapters", function()
         end,
       },
     }
+    assert.same({ path = vault .. "/Notes", type = "directory" }, require("miniobsidian.explorer").current_entry())
     assert.equals(vault .. "/Notes", require("miniobsidian.explorer").current_dir())
   end)
 
@@ -77,6 +80,7 @@ describe("explorer adapters", function()
         return { type = "directory", name = "Sub" }
       end,
     }
+    assert.same({ path = vault .. "/Notes/Sub", type = "directory" }, require("miniobsidian.explorer").current_entry())
     assert.equals(vault .. "/Notes/Sub", require("miniobsidian.explorer").current_dir())
   end)
 

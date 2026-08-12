@@ -12,6 +12,8 @@ CLI 或 Agent，也不承担多个客户端之间的写入协调。
 - 在默认目录或文件树当前目录创建笔记，支持自定义 Note ID
 - 通过 `snacks.nvim` 快速切换笔记和全文搜索
 - 跳转和创建 Wikilink，支持 alias、heading、block ID、限定路径和同名消歧
+- 不依赖 LSP 扫描当前笔记的反向链接，并跳转到准确引用行
+- 移动或重命名笔记，并按移动前的解析结果安全更新 Vault 内 Wikilink
 - 通过 `blink.cmp` 补全笔记目标和 Checkbox 状态，并预览笔记内容
 - Checkbox 状态循环、普通列表升级和 Checkbox 清除
 - 递归模板选择、模板创建和 Obsidian 风格日期变量
@@ -41,7 +43,7 @@ Vault 会被拒绝；从 Obsidian 同步的配置会在应用前验证；创建�
 
 没有安装可选依赖时，Vault、笔记、模板、Daily Note、Wikilink 跳转和 Checkbox
 等基础功能仍可使用。Vault 和模板选择器会回退到 `vim.ui.select`；缺少
-`snacks.nvim` 时只有 `ObsidianSwitch`、`ObsidianSearch` 不可用，缺少 `ripgrep`
+`snacks.nvim` 时只有 `ObsidianSwitch`、`ObsidianSearch`、`ObsidianBacklinks` 不可用，缺少 `ripgrep`
 时只有全文搜索不可用。
 
 ## 安装
@@ -58,6 +60,9 @@ lazy.nvim 示例：
     "ObsidianSwitchVault",
     "ObsidianSwitch",
     "ObsidianSearch",
+    "ObsidianBacklinks",
+    "ObsidianMove",
+    "ObsidianRename",
     "ObsidianTemplate",
     "ObsidianNewTemplate",
     "ObsidianPasteImg",
@@ -184,6 +189,9 @@ Note 前中止操作。
 | `:ObsidianSwitchVault` | 无 | 选择并切换活跃 Vault |
 | `:ObsidianSwitch` | 无 | 在 `picker_scope` 范围内使用 snacks 模糊查找 Markdown 笔记 |
 | `:ObsidianSearch [关键词]` | 关键词可选 | 在 `picker_scope` 范围内使用 snacks + ripgrep 全文搜索 Markdown |
+| `:ObsidianBacklinks` | 无 | 不依赖 LSP，列出 Vault 内实际指向当前笔记的 Wikilink 并跳转到引用行 |
+| `:ObsidianMove [目标]` | 目标可选 | 移动当前 Markdown 或文件树选中的笔记，并更新 Wikilink；省略 `.md` 时自动补全 |
+| `:ObsidianRename [新文件名]` | 文件名可选 | 在原目录重命名当前 Markdown 或文件树选中的笔记并更新引用；`.md` 可省略 |
 | `:ObsidianTemplate` | 无 | 递归选择模板，渲染后插入光标下一行 |
 | `:ObsidianNewTemplate [名称]` | 名称可选 | 创建或打开模板，不覆盖已有模板 |
 | `:ObsidianPasteImg [名称]` | 名称可选 | macOS 粘贴图片并插入相对 Markdown 链接 |
@@ -192,6 +200,30 @@ Note 前中止操作。
 
 `ObsidianNewHere` 支持 snacks explorer、neo-tree、nvim-tree、oil.nvim 和 netrw。
 检测到 Vault 外目录时会中止，不会静默回退到 Vault。
+
+`ObsidianMove` 的目标是 Vault 相对 Note ID，例如
+`:ObsidianMove Archive/Project` 会移动到 `Archive/Project.md`。目标以 `/` 结尾或
+已经是目录时保留原文件名。更新引用时会基于移动前的真实解析结果处理，因此不会
+误改同名但歧义的链接。原短链接在新文件名全 Vault 唯一时继续使用短链接；若
+出现同名目标则自动升级为 Vault 相对路径；原本带目录的链接继续使用完整路径。
+alias、heading、block ID、`.md` 后缀和嵌入语法均会保留。代码块、
+行内代码与 Obsidian `%%` 注释中的文本不会作为引用改写。为避免覆盖用户编辑，
+Vault 内存在其他未保存的 Markdown buffer 时操作会中止；写入失败会尝试完整回滚。
+成功后会向支持文件操作的 LSP 同步重命名及文件变化，使 definition/reference 索引
+及时切换到新路径。
+命令既可在当前 Markdown 笔记中执行，也可在 snacks explorer、neo-tree、
+nvim-tree、oil.nvim 或 netrw 中对光标选中的 `.md` 文件执行；选中目录或其他
+文件类型时会中止。
+
+移动目标支持 Vault 目录补全：在命令行输入 `:ObsidianMove <Tab>` 可列出目录，
+输入前缀后按 Tab 可缩小候选，例如 `:ObsidianMove Pro<Tab>`。通过快捷键或无参
+命令打开交互输入时同样可按 Tab 补全。补全菜单中可用 `↓`/`j` 选择下一项，
+`↑`/`h`/`k` 选择上一项。候选以 `/` 结尾，因此会保留原文件名。
+
+`ObsidianRename` 是同目录重命名，例如 `:ObsidianRename Project Plan`。它不接受
+目录分隔符；需要同时更换目录时使用 `ObsidianMove`。文件名发生变化时，如果
+frontmatter `title` 和笔记中的第一个一级标题仍与旧文件名完全一致，它们会同步为
+新文件名；自定义标题不会被覆盖。引用同样遵循最短且无歧义的链接策略。
 
 ## Wikilink
 
@@ -214,6 +246,11 @@ block ID。
 Heading 定位按可见标题文本做大小写不敏感匹配，并支持重复标题的 `-1`、`-2`
 后缀；它不是完整的 Obsidian anchor slug 实现。Block ID 只匹配行末的
 `^block-id`。
+
+`:ObsidianBacklinks` 扫描整个 Vault，并使用与链接跳转相同的解析规则列出当前
+笔记的反向链接。短链接存在同名歧义时不会猜测目标；带目录、alias、heading、
+block ID 和嵌入链接均可识别。代码块、行内代码和 `%%` 注释中的文本不会计入。
+结果通过 Snacks Picker 展示，确认后跳到引用所在行；此流程完全不依赖 LSP。
 
 可将跟随链接和 Checkbox 切换绑定到同一个键：
 
@@ -311,6 +348,8 @@ vim.api.nvim_create_autocmd("BufEnter", {
 | `User MiniObsidianSetup` | 无 | `setup()` 成功完成后 |
 | `User MiniObsidianVaultSwitch` | `{ name, path }` | Vault 成功切换后 |
 | `User MiniObsidianNoteOpened` | `{ path, opts }` | 插件直接打开笔记后 |
+| `User MiniObsidianNoteMoved` | `{ operation, old_path, new_path, updated_files, updated_links, updated_identity_fields }` | 笔记及引用成功更新后 |
+| `User MiniObsidianNoteRenamed` | `{ operation, old_path, new_path, updated_files, updated_links, updated_identity_fields }` | 重命名及引用成功更新后 |
 
 ## Lua API
 
@@ -336,7 +375,10 @@ note.new_note_in_dir(absolute_dir)
 note.quick_switch()
 note.search()
 note.search("关键词")
+note.backlinks()
 note.follow_or_create(wikilink_or_parsed)
+note.move("Archive/新路径")       -- 移动当前笔记并更新 Wikilink
+note.rename("新文件名")          -- 在原目录重命名并更新 Wikilink
 
 require("miniobsidian.vault").pick_and_switch()
 require("miniobsidian.vault").do_switch({ name = "Personal", path = "/abs/vault" })

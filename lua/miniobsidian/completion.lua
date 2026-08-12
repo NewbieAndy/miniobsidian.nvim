@@ -8,6 +8,29 @@ local ItemKind = require("blink.cmp.types").CompletionItemKind
 
 -- PlainText = 1，Snippet = 2；我们所有插入内容均为纯文本，显式声明避免 blink 误判
 local PlainText = vim.lsp.protocol.InsertTextFormat.PlainText
+local uv = vim.uv or vim.loop
+
+--- 统一文件路径用于比较。优先解析符号链接及 macOS 的 /var、/private/var 别名；
+--- 文件暂时不存在时退回到纯字符串规范化。
+---@param path string|nil
+---@return string|nil
+local function canonical_path(path)
+  if not path or path == "" then
+    return nil
+  end
+  return uv.fs_realpath(path) or vim.fs.normalize(path)
+end
+
+--- 获取触发当前补全请求的 buffer 文件路径。
+---@param ctx table blink.cmp Context 对象
+---@return string|nil
+local function current_note_path(ctx)
+  local bufnr = type(ctx.bufnr) == "number" and ctx.bufnr or 0
+  if bufnr ~= 0 and not vim.api.nvim_buf_is_valid(bufnr) then
+    bufnr = 0
+  end
+  return canonical_path(vim.api.nvim_buf_get_name(bufnr))
+end
 
 -- ──────────────────────────────────────────────
 -- 解析函数
@@ -180,6 +203,7 @@ function M:get_completions(ctx, callback)
             detail = detail, -- 菜单右侧灰色文字
             _target = stem_count[stem] > 1 and rel:gsub("%.md$", "") or stem,
             _path = path, -- 私有字段：resolve() 时读取笔记内容用
+            _canonical_path = canonical_path(path), -- 用于按请求过滤当前笔记
           })
         end
         _items_cache = items
@@ -189,24 +213,29 @@ function M:get_completions(ctx, callback)
       -- textEdit.range 依赖实时光标位置，每次重建（不能缓存，否则换行后 range 错位）
       -- 同时避免直接返回缓存 item（blink 会 mutate 返回的 items）
       local final_items = {}
+      local current_path = current_note_path(ctx)
       for _, item in ipairs(_items_cache) do
-        table.insert(final_items, {
-          label = item.label,
-          filterText = item.filterText,
-          kind = item.kind,
-          detail = item.detail,
-          insertTextFormat = PlainText,
-          _target = item._target,
-          _path = item._path,
-          textEdit = {
-            newText = "[[" .. item._target .. "]]",
-            range = {
-              start = { line = wl.row0, character = wl.start_byte },
-              ["end"] = { line = wl.row0, character = wl.end_byte },
-              -- ["end"] 是 Lua 保留字，必须用方括号语法
+        -- 当前笔记不应出现在 Wikilink 候选中，避免无意生成自引用。
+        -- 过滤放在实时 items 构建阶段，保证共用缓存可服务不同 buffer。
+        if not current_path or item._canonical_path ~= current_path then
+          table.insert(final_items, {
+            label = item.label,
+            filterText = item.filterText,
+            kind = item.kind,
+            detail = item.detail,
+            insertTextFormat = PlainText,
+            _target = item._target,
+            _path = item._path,
+            textEdit = {
+              newText = "[[" .. item._target .. "]]",
+              range = {
+                start = { line = wl.row0, character = wl.start_byte },
+                ["end"] = { line = wl.row0, character = wl.end_byte },
+                -- ["end"] 是 Lua 保留字，必须用方括号语法
+              },
             },
-          },
-        })
+          })
+        end
       end
       -- is_incomplete_forward = false：已拿到全量笔记，后续输入让 blink 客户端过滤即可
       return { is_incomplete_backward = false, is_incomplete_forward = false, items = final_items }

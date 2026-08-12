@@ -1,6 +1,7 @@
 local M = {}
 
 local uv = vim.uv or vim.loop
+local temporary_sequence = 0
 
 local function is_exists_error(err)
   return type(err) == "string" and err:match("^EEXIST") ~= nil
@@ -113,6 +114,30 @@ function M.link_exclusive(source, target)
     return false, nil
   end
   return nil, tostring(link_err)
+end
+
+---Atomically replace a file with complete byte content.
+---The temporary file is created beside the target so rename stays on one filesystem.
+---@param path string
+---@param content string
+---@return boolean|nil written
+---@return string|nil error
+function M.write_atomic(path, content)
+  temporary_sequence = temporary_sequence + 1
+  local temporary = string.format("%s.miniobsidian.tmp.%d.%d", path, uv.os_getpid(), temporary_sequence)
+  local stat = uv.fs_stat(path)
+  local mode = stat and stat.mode or 420
+  local created, create_err = M.create_exclusive(temporary, content, mode)
+  if not created then
+    return nil, create_err or "temporary path already exists"
+  end
+
+  local renamed, rename_err = uv.fs_rename(temporary, path)
+  if not renamed then
+    M.unlink(temporary)
+    return nil, tostring(rename_err)
+  end
+  return true, nil
 end
 
 return M

@@ -36,8 +36,8 @@ Optional:
   osascript      macOS image paste
 
 Vault and template selection fall back to vim.ui.select. Without snacks.nvim,
-only ObsidianSwitch and ObsidianSearch are unavailable. Without ripgrep, only
-full-text search is unavailable.
+only ObsidianSwitch, ObsidianSearch, and ObsidianBacklinks are unavailable. Without
+ripgrep, only full-text search is unavailable.
 
 lazy.nvim plugin specification:
 >lua
@@ -46,7 +46,9 @@ lazy.nvim plugin specification:
     ft = "markdown",
     cmd = {
       "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault",
-      "ObsidianSwitch", "ObsidianSearch", "ObsidianTemplate",
+      "ObsidianSwitch", "ObsidianSearch", "ObsidianBacklinks",
+      "ObsidianMove", "ObsidianRename",
+      "ObsidianTemplate",
       "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
       "ObsidianSetup",
     },
@@ -197,6 +199,36 @@ blink.cmp provider:
 :ObsidianSearch [query]
     Search Markdown within picker_scope through snacks.nvim and ripgrep.
 
+                                                       *:ObsidianBacklinks*
+:ObsidianBacklinks
+    Scan the whole Vault for Wikilinks that resolve to the current note and show them
+    in a Snacks Picker. Qualified links, aliases, headings, block IDs, and embeds are
+    recognized; ambiguous short links are not guessed. Fenced code, inline code, and
+    %% comments are ignored. Confirmation jumps to the reference line without LSP.
+
+                                                              *:ObsidianMove*
+:ObsidianMove [target]
+    Move the current Markdown note or file-tree selection and update Wikilinks that
+    resolve to it. target is a Vault-relative Note ID; .md is optional. A trailing
+    slash or existing directory preserves the filename. A missing target prompts.
+    A short link stays short when the new basename is unique, becomes Vault-qualified
+    when ambiguous, and an originally qualified link stays qualified. Aliases,
+    fragments, and explicit .md suffixes are preserved.
+    Press Tab in the command line or interactive prompt to complete Vault-relative
+    directories. A typed prefix filters candidates. In the interactive completion
+    menu, Down/j selects next and Up/h/k selects previous. Candidates end in /.
+    Supported LSP clients receive rename and watched-file notifications after success
+    so definition and reference indexes switch to the new path.
+
+                                                            *:ObsidianRename*
+:ObsidianRename [new-name]
+    Rename the current Markdown note or file-tree selection in its existing directory
+    and update Wikilinks that resolve to it. Only a filename is accepted; .md is
+    optional. A missing name prompts. Use ObsidianMove to change the directory. A
+    frontmatter title and the first level-one heading are synchronized when they still
+    exactly match the old filename; custom titles are preserved. References use the
+    same shortest-unambiguous link policy.
+
                                                           *:ObsidianTemplate*
 :ObsidianTemplate
     Select a recursive template, render it, and insert below the cursor.
@@ -297,7 +329,10 @@ Notes:
   note.quick_switch()
   note.search()
   note.search("query")
+  note.backlinks()
   note.follow_or_create(wikilink_or_parsed)
+  note.move("Archive/New Path")
+  note.rename("New Filename")
 <
 
 Other workflows:
@@ -351,6 +386,16 @@ MiniObsidianVaultSwitch
 
 MiniObsidianNoteOpened
     Fires after a direct plugin note open. data = { path, opts }.
+
+MiniObsidianNoteMoved
+    Fires after the note and its references are updated.
+    data = { operation, old_path, new_path, updated_files, updated_links,
+    updated_identity_fields }.
+
+MiniObsidianNoteRenamed
+    Fires after a rename and its references are updated.
+    data = { operation, old_path, new_path, updated_files, updated_links,
+    updated_identity_fields }.
 
 ===============================================================================
 8. HEALTH                                                    *miniobsidian-health*

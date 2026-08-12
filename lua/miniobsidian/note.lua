@@ -27,6 +27,18 @@ function M.search(...)
   return require("miniobsidian.note_picker").search(...)
 end
 
+function M.move(...)
+  return require("miniobsidian.note_move").move(...)
+end
+
+function M.rename(...)
+  return require("miniobsidian.note_move").rename(...)
+end
+
+function M.backlinks(...)
+  return require("miniobsidian.backlinks").open(...)
+end
+
 ---@param input string|table Wikilink target or parsed result
 function M.follow_or_create(input)
   local core = require("miniobsidian")

@@ -26,7 +26,7 @@ for file in $docs; do
   done
 done
 
-legacy_patterns="miniobsidian.cli external_change_mode watch_external_changes miniobsidian.agent_result ObsidianMove ObsidianAudit"
+legacy_patterns="miniobsidian.cli external_change_mode watch_external_changes miniobsidian.agent_result ObsidianAudit"
 for pattern in $legacy_patterns; do
   if grep -Fq "$pattern" $docs; then
     echo "formal documentation contains removed API: $pattern" >&2

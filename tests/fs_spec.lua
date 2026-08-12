@@ -65,6 +65,19 @@ describe("local file creation", function()
     assert.same({ "first", "second" }, fs.read_lines(path))
   end)
 
+  it("atomically replaces complete file content", function()
+    local fs = require("miniobsidian.fs")
+    local path = vault .. "/Notes/replace.md"
+    vim.fn.writefile({ "old" }, path)
+
+    local written, err = fs.write_atomic(path, "new\ncontent\n")
+
+    assert.is_true(written)
+    assert.is_nil(err)
+    assert.equals("new\ncontent\n", fs.read(path))
+    assert.same({}, vim.fn.glob(path .. ".miniobsidian.tmp.*", false, true))
+  end)
+
   it("reports missing reads and safely removes temporary files", function()
     local fs = require("miniobsidian.fs")
     local path = vault .. "/Notes/temp"

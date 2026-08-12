@@ -6,6 +6,7 @@ cd "$root"
 
 module_tests="
 checkbox:checkbox_spec.lua
+backlinks:backlinks_spec.lua
 completion:completion_spec.lua
 config_sync:daily_spec.lua
 daily:daily_spec.lua
@@ -18,6 +19,7 @@ init:init_spec.lua
 link:link_spec.lua
 note:note_spec.lua
 note_create:note_spec.lua
+note_move:note_move_spec.lua
 note_picker:note_spec.lua
 path:path_spec.lua
 template:template_spec.lua

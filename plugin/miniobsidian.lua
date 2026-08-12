@@ -8,11 +8,15 @@
 -- 依赖关系：miniobsidian（init）、miniobsidian.note、miniobsidian.template、
 --           miniobsidian.image、miniobsidian.daily（均为延迟 require）
 -- 对外 API：用户命令 ObsidianNew / ObsidianNewHere / ObsidianSwitchVault /
---           ObsidianSwitch / ObsidianSearch / ObsidianTemplate /
+--           ObsidianSwitch / ObsidianSearch / ObsidianBacklinks /
+--           ObsidianMove / ObsidianRename /
+--           ObsidianTemplate /
 --           ObsidianNewTemplate / ObsidianPasteImg / ObsidianToday /
 --           ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
+--             User MiniObsidianNoteMoved（移动及引用更新后触发）
+--             User MiniObsidianNoteRenamed（重命名及引用更新后触发）
 -- ============================================================
 
 -- ── 防止重复加载 ───────────────────────────────────────────────
@@ -78,6 +82,38 @@ vim.api.nvim_create_user_command("ObsidianSearch", function(opts)
 end, {
   nargs = "?",
   desc = "全文搜索 vault",
+})
+
+--- :ObsidianBacklinks
+-- 扫描 Vault 中实际解析到当前笔记的 Wikilink，并通过 Snacks Picker 展示引用位置。
+-- 不依赖 LSP；选择结果后跳转到引用所在行。
+vim.api.nvim_create_user_command("ObsidianBacklinks", function()
+  require("miniobsidian.note").backlinks()
+end, {
+  desc = "列出当前笔记的反向链接（不依赖 LSP）",
+})
+
+--- :ObsidianMove [target]
+-- 将当前 Markdown buffer 或文件树选中的笔记移动到目标 Note ID，并更新 Wikilink。
+-- 目标省略 .md 时自动补全；以 / 结尾或传入已有目录时保留原文件名。
+vim.api.nvim_create_user_command("ObsidianMove", function(opts)
+  require("miniobsidian.note").move(opts.args ~= "" and opts.args or nil)
+end, {
+  nargs = "*",
+  complete = function(arg_lead, cmd_line, cursor_pos)
+    return require("miniobsidian.note_move").complete_directories(arg_lead, cmd_line, cursor_pos)
+  end,
+  desc = "移动当前或文件树选中的笔记并更新 Wikilink",
+})
+
+--- :ObsidianRename [name]
+-- 重命名当前 Markdown buffer 或文件树选中的笔记，并复用移动事务更新 Wikilink。
+-- name 只允许文件名，省略 .md 时自动补全；省略参数时提示输入。
+vim.api.nvim_create_user_command("ObsidianRename", function(opts)
+  require("miniobsidian.note").rename(opts.args ~= "" and opts.args or nil)
+end, {
+  nargs = "*",
+  desc = "重命名当前或文件树选中的笔记并更新 Wikilink",
 })
 
 --- :ObsidianTemplate

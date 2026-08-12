@@ -24,6 +24,9 @@ describe("plugin entry", function()
       "ObsidianSwitchVault",
       "ObsidianSwitch",
       "ObsidianSearch",
+      "ObsidianBacklinks",
+      "ObsidianMove",
+      "ObsidianRename",
       "ObsidianTemplate",
       "ObsidianNewTemplate",
       "ObsidianPasteImg",
@@ -43,6 +46,39 @@ describe("plugin entry", function()
     }
     vim.cmd("ObsidianNew! Example")
     assert.same({ title = "Example", switch_root = true }, captured)
+  end)
+
+  it("passes the move destination to the note facade", function()
+    local captured
+    package.loaded["miniobsidian.note"] = {
+      move = function(destination)
+        captured = destination
+      end,
+    }
+    vim.cmd("ObsidianMove Archive")
+    assert.equals("Archive", captured)
+  end)
+
+  it("passes the new filename to the note facade", function()
+    local captured
+    package.loaded["miniobsidian.note"] = {
+      rename = function(name)
+        captured = name
+      end,
+    }
+    vim.cmd("ObsidianRename New Name")
+    assert.equals("New Name", captured)
+  end)
+
+  it("opens backlinks through the note facade", function()
+    local called = false
+    package.loaded["miniobsidian.note"] = {
+      backlinks = function()
+        called = true
+      end,
+    }
+    vim.cmd("ObsidianBacklinks")
+    assert.is_true(called)
   end)
 
   it("registers buffer autocmds and updates the written note incrementally", function()

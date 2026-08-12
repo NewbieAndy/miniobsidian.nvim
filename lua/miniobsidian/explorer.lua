@@ -1,9 +1,9 @@
 local M = {}
 
----返回当前文件浏览器光标对应的目录。
+---返回当前文件浏览器光标对应的文件或目录。
 ---支持顺序：snacks explorer、neo-tree、nvim-tree、oil.nvim、netrw。
----@return string|nil
-function M.current_dir()
+---@return {path: string, type: "file"|"directory"}|nil
+function M.current_entry()
   local current_win = vim.api.nvim_get_current_win()
   local ft = vim.bo.filetype
 
@@ -20,7 +20,7 @@ function M.current_dir()
           local path = ok_items and items and items[1] and items[1].file
           if path and path ~= "" then
             local clean = path:gsub("/+$", "")
-            return vim.fn.isdirectory(path) == 1 and clean or vim.fn.fnamemodify(clean, ":h")
+            return { path = clean, type = vim.fn.isdirectory(path) == 1 and "directory" or "file" }
           end
         end
       end
@@ -33,7 +33,7 @@ function M.current_dir()
       local state = manager.get_state("filesystem")
       local node = state and state.tree and state.tree:get_node()
       if node and node.path then
-        return node.type == "directory" and node.path or vim.fn.fnamemodify(node.path, ":h")
+        return { path = node.path, type = node.type == "directory" and "directory" or "file" }
       end
     end
   end
@@ -43,7 +43,7 @@ function M.current_dir()
     if ok then
       local ok_node, node = pcall(api.tree.get_node_under_cursor)
       if ok_node and node and node.absolute_path then
-        return node.type == "directory" and node.absolute_path or vim.fn.fnamemodify(node.absolute_path, ":h")
+        return { path = node.absolute_path, type = node.type == "directory" and "directory" or "file" }
       end
     end
   end
@@ -54,10 +54,11 @@ function M.current_dir()
       local ok_dir, dir = pcall(oil.get_current_dir)
       if ok_dir and dir then
         local ok_entry, entry = pcall(oil.get_cursor_entry)
-        if ok_entry and entry and entry.type == "directory" and entry.name then
-          return (dir .. entry.name):gsub("/+$", "")
+        if ok_entry and entry and entry.name then
+          local path = (dir:gsub("/+$", "") .. "/" .. entry.name):gsub("/+$", "")
+          return { path = path, type = entry.type == "directory" and "directory" or "file" }
         end
-        return dir:gsub("/+$", "")
+        return { path = dir:gsub("/+$", ""), type = "directory" }
       end
     end
   end
@@ -69,14 +70,25 @@ function M.current_dir()
       if name and name ~= "" and name ~= "." and name ~= ".." then
         local full = curdir .. "/" .. name
         if vim.fn.isdirectory(full) == 1 then
-          return full
+          return { path = full, type = "directory" }
         end
+        return { path = full, type = "file" }
       end
-      return curdir
+      return { path = curdir, type = "directory" }
     end
   end
 
   return nil
+end
+
+---返回当前文件浏览器光标对应的目录。
+---@return string|nil
+function M.current_dir()
+  local entry = M.current_entry()
+  if not entry then
+    return nil
+  end
+  return entry.type == "directory" and entry.path or vim.fn.fnamemodify(entry.path, ":h")
 end
 
 return M

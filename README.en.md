@@ -14,6 +14,8 @@ across clients.
 - Switch and search Markdown notes through `snacks.nvim`
 - Navigate and create Wikilinks with aliases, headings, block IDs, qualified paths,
   and duplicate-name disambiguation
+- Scan backlinks to the current note and jump to exact reference lines without LSP
+- Move or rename notes while updating Vault Wikilinks from their pre-move resolution
 - Complete note targets and checkbox states through `blink.cmp`, with note previews
 - Cycle and clear checkboxes, including upgrading plain list items
 - Select recursive templates and render Obsidian-style date variables
@@ -45,7 +47,8 @@ and reports I/O failures.
 
 Core Vault, note, template, Daily Note, link navigation, and checkbox workflows remain
 available without optional dependencies. Vault and template selectors fall back to
-`vim.ui.select`. Without `snacks.nvim`, only `ObsidianSwitch` and `ObsidianSearch`
+`vim.ui.select`. Without `snacks.nvim`, only `ObsidianSwitch`, `ObsidianSearch`, and
+`ObsidianBacklinks`
 are unavailable; without ripgrep, only full-text search is unavailable.
 
 ## Installation
@@ -62,6 +65,9 @@ lazy.nvim example:
     "ObsidianSwitchVault",
     "ObsidianSwitch",
     "ObsidianSearch",
+    "ObsidianBacklinks",
+    "ObsidianMove",
+    "ObsidianRename",
     "ObsidianTemplate",
     "ObsidianNewTemplate",
     "ObsidianPasteImg",
@@ -192,6 +198,9 @@ order.
 | `:ObsidianSwitchVault` | Select the active Vault |
 | `:ObsidianSwitch` | Fuzzy-find Markdown notes within `picker_scope` through snacks |
 | `:ObsidianSearch [query]` | Search Markdown within `picker_scope` through snacks and ripgrep |
+| `:ObsidianBacklinks` | List resolved Wikilinks to the current note and jump to the reference without LSP |
+| `:ObsidianMove [target]` | Move the current Markdown note or file-tree selection and update resolved Wikilinks; `.md` is optional |
+| `:ObsidianRename [new-name]` | Rename the current Markdown note or file-tree selection in place and update references; `.md` is optional |
 | `:ObsidianTemplate` | Select, render, and insert a recursive template |
 | `:ObsidianNewTemplate [name]` | Create or open a template without replacing it |
 | `:ObsidianPasteImg [name]` | Paste an image on macOS and insert a relative Markdown link |
@@ -200,6 +209,34 @@ order.
 
 `ObsidianNewHere` supports snacks explorer, neo-tree, nvim-tree, oil.nvim, and netrw.
 If it detects a directory outside the active Vault, it stops instead of falling back.
+
+`ObsidianMove` accepts a Vault-relative Note ID. For example,
+`:ObsidianMove Archive/Project` moves the current note to `Archive/Project.md`.
+A trailing `/`, or an existing directory, preserves the current filename. Backlinks are
+updated from their pre-move resolution, so ambiguous links are not guessed. A short link
+stays short when the new basename is unique across the Vault, becomes Vault-qualified
+when it would be ambiguous, and an originally qualified link stays qualified. Aliases,
+headings, block IDs, `.md` suffixes, and embeds are preserved. Text inside fenced code, inline code, and
+Obsidian `%%` comments is not treated as a link. The operation stops when another Vault
+Markdown buffer has unsaved edits, and attempts a full rollback on write failure.
+After success, supported LSP clients receive rename and watched-file notifications so
+definition/reference indexes can switch to the new path immediately.
+Both commands work from a Markdown buffer or on the selected `.md` file in snacks
+explorer, neo-tree, nvim-tree, oil.nvim, or netrw. A directory or non-Markdown
+selection is rejected.
+
+Move targets support Vault-directory completion. Use `:ObsidianMove <Tab>` to list
+directories or type a prefix such as `:ObsidianMove Pro<Tab>`. The interactive input
+opened by a keymap or argument-less command supports the same Tab completion.
+In that completion menu, use Down/j for the next item and Up/h/k for the previous
+item. Candidates end in `/`, so choosing one preserves the current filename.
+
+`ObsidianRename` renames within the current directory, for example
+`:ObsidianRename Project Plan`. It rejects directory separators; use `ObsidianMove`
+when the directory must also change. When the filename changes, a frontmatter `title`
+and the first level-one heading are synchronized if they still exactly match the old
+filename. Custom titles are preserved. References follow the same shortest-unambiguous
+link policy.
 
 ## Wikilinks
 
@@ -222,6 +259,12 @@ note targets only; it does not complete aliases, headings, or block IDs.
 Heading lookup matches visible heading text case-insensitively and supports `-1`,
 `-2`, and later suffixes for duplicate headings; it is not a complete implementation
 of Obsidian's anchor slug algorithm. Block IDs match only at the end of a line.
+
+`:ObsidianBacklinks` scans the whole Vault with the same resolution rules used for link
+navigation. Ambiguous short links are not guessed; qualified links, aliases, headings,
+block IDs, and embeds are recognized. Fenced code, inline code, and `%%` comments are
+ignored. Results open in a Snacks Picker and jump directly to the reference line without
+using LSP.
 
 ```lua
 vim.keymap.set("n", "<CR>", function()
@@ -319,6 +362,8 @@ vim.api.nvim_create_autocmd("BufEnter", {
 | `User MiniObsidianSetup` | none | After successful `setup()` |
 | `User MiniObsidianVaultSwitch` | `{ name, path }` | After a successful switch |
 | `User MiniObsidianNoteOpened` | `{ path, opts }` | After a direct plugin note open |
+| `User MiniObsidianNoteMoved` | `{ operation, old_path, new_path, updated_files, updated_links, updated_identity_fields }` | After the note and its references are updated |
+| `User MiniObsidianNoteRenamed` | `{ operation, old_path, new_path, updated_files, updated_links, updated_identity_fields }` | After a rename and its references are updated |
 
 ## Lua API
 
@@ -344,7 +389,10 @@ note.new_note_in_dir(absolute_dir)
 note.quick_switch()
 note.search()
 note.search("query")
+note.backlinks()
 note.follow_or_create(wikilink_or_parsed)
+note.move("Archive/New Path")    -- move current note and update Wikilinks
+note.rename("New Filename")     -- rename in place and update Wikilinks
 
 require("miniobsidian.vault").pick_and_switch()
 require("miniobsidian.vault").do_switch({ name = "Personal", path = "/abs/vault" })

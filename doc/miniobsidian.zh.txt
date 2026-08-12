@@ -35,7 +35,8 @@ Neovim 原生行为。插件自身限制所有目标位于当前 Vault 内，并
   osascript      macOS 图片粘贴
 
 Vault 和模板选择会回退到 vim.ui.select。缺少 snacks.nvim 时只有
-ObsidianSwitch、ObsidianSearch 不可用；缺少 ripgrep 时只有全文搜索不可用。
+ObsidianSwitch、ObsidianSearch、ObsidianBacklinks 不可用；缺少 ripgrep 时只有
+全文搜索不可用。
 
 lazy.nvim 插件配置：
 >lua
@@ -44,7 +45,9 @@ lazy.nvim 插件配置：
     ft = "markdown",
     cmd = {
       "ObsidianNew", "ObsidianNewHere", "ObsidianSwitchVault",
-      "ObsidianSwitch", "ObsidianSearch", "ObsidianTemplate",
+      "ObsidianSwitch", "ObsidianSearch", "ObsidianBacklinks",
+      "ObsidianMove", "ObsidianRename",
+      "ObsidianTemplate",
       "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
       "ObsidianSetup",
     },
@@ -191,6 +194,32 @@ blink.cmp provider：
 :ObsidianSearch [关键词]
     在 picker_scope 范围内使用 snacks.nvim 和 ripgrep 全文搜索 Markdown。
 
+                                   *miniobsidian-zh-command-backlinks*
+:ObsidianBacklinks
+    扫描整个 Vault，列出实际解析到当前笔记的 Wikilink，并通过 Snacks Picker
+    跳转到引用行。支持带目录、alias、heading、block ID 和嵌入链接；同名短链接
+    存在歧义时不会猜测。代码块、行内代码和 %% 注释中的文本忽略。完全不依赖
+    LSP。
+
+                                        *miniobsidian-zh-command-move*
+:ObsidianMove [目标]
+    移动当前 Markdown 或文件树选中的笔记，并更新 Vault 内实际指向它的
+    Wikilink。目标为 Vault 相对 Note ID，省略 .md 时自动补全；以 / 结尾或
+    目标为已有目录时保留原文件名。省略目标时提示输入。
+    原短链接在新文件名全 Vault 唯一时保持短链接；存在同名目标时升级为 Vault
+    相对路径；原本带目录的链接继续使用完整路径。alias、锚点和 .md 后缀保留。
+    命令行或交互输入中按 Tab 可补全 Vault 相对目录；输入目录前缀后再按 Tab
+    可过滤候选。交互补全菜单支持 ↓/j 下一项和 ↑/h/k 上一项。目录候选以 /
+    结尾。成功后向支持的 LSP 同步重命名及文件变化，刷新定义和引用索引。
+
+                                      *miniobsidian-zh-command-rename*
+:ObsidianRename [新文件名]
+    在原目录重命名当前 Markdown 或文件树选中的笔记并更新 Wikilink。只接受
+    文件名，.md 可省略；省略文件名时提示输入。需要更换目录时使用
+    ObsidianMove。文件名变化时，若 frontmatter title 和第一个一级标题仍与旧
+    文件名完全一致，则同步为新文件名；自定义标题保持不变。引用采用最短且
+    无歧义的链接策略。
+
                                     *miniobsidian-zh-command-template*
 :ObsidianTemplate
     递归选择模板，渲染后插入当前光标下一行。
@@ -285,7 +314,10 @@ BMP 或 SVG；截图和浏览器图片输出 PNG/JPG/GIF。若名称已被任一
   note.quick_switch()
   note.search()
   note.search("关键词")
+  note.backlinks()
   note.follow_or_create(wikilink_or_parsed)
+  note.move("Archive/新路径")
+  note.rename("新文件名")
 <
 
 其他工作流：
@@ -336,6 +368,16 @@ MiniObsidianVaultSwitch
 
 MiniObsidianNoteOpened
     插件直接打开笔记后触发。data = { path, opts }。
+
+MiniObsidianNoteMoved
+    笔记和引用成功更新后触发。
+    data = { operation, old_path, new_path, updated_files, updated_links,
+    updated_identity_fields }。
+
+MiniObsidianNoteRenamed
+    重命名和引用成功更新后触发。
+    data = { operation, old_path, new_path, updated_files, updated_links,
+    updated_identity_fields }。
 
 ===============================================================================
 8. 健康检查                                        *miniobsidian-zh-health*
