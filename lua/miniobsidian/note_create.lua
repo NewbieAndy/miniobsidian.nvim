@@ -1,6 +1,25 @@
+-- ============================================================
+-- 文件名：note_create.lua
+-- 模块职责：提供笔记创建的核心实现，包括根据标题生成安全路径、
+--           写入 frontmatter、打开 buffer 并触发 after_note_open 回调。
+--           被 note.lua 暴露为 public API，也被 plugin/miniobsidian.lua
+--           中的用户命令直接调用。
+-- 依赖关系：miniobsidian（config、notify、update_note_cache、after_note_open）、
+--           miniobsidian.path、miniobsidian.fs
+-- 对外 API：M.new_note(title, opts)、M.new_note_in_dir(dir)、
+--           M.new_note_here()、M.create(title, dir, opts)
+-- ============================================================
 local M = {}
 local path_policy = require("miniobsidian.path")
 
+--- 根据标题与目标目录计算新笔记的绝对路径。
+-- 先由 note_id_func 生成文件名 ID，再解析目标目录，最后组合成 Vault 相对
+-- 逻辑路径并二次校验。目录不存在时会自动创建。
+---@param title string 笔记标题
+---@param target_dir string|nil 目标目录（绝对路径或 Vault 相对路径）
+---@param explicit_id string|nil 显式指定的 Note ID，优先级高于 note_id_func
+---@return string|nil path 安全的目标绝对路径
+---@return string|nil err 错误信息
 local function note_path(title, target_dir, explicit_id)
   local cfg = require("miniobsidian").config
   local id = explicit_id or cfg.note_id_func(title)
@@ -19,10 +38,13 @@ local function note_path(title, target_dir, explicit_id)
   if not target then
     return nil, target_err
   end
+  -- 确保父目录存在，避免后续写入失败
   vim.fn.mkdir(vim.fn.fnamemodify(target.path, ":h"), "p")
   return target.path
 end
 
+--- 交互式或命令行创建新笔记。
+-- 未提供标题时弹出 vim.ui.input 让用户输入。
 ---@param title? string
 ---@param opts? {switch_root?: boolean, note_id?: string}
 function M.new_note(title, opts)
@@ -38,7 +60,9 @@ function M.new_note(title, opts)
   end)
 end
 
----@param dir string
+--- 在指定绝对目录下创建新笔记。
+-- 会先校验目录是否位于当前 Vault 内。
+---@param dir string 目标目录绝对路径
 function M.new_note_in_dir(dir)
   local core = require("miniobsidian")
   dir = dir:gsub("/+$", "")
@@ -53,6 +77,8 @@ function M.new_note_in_dir(dir)
   end)
 end
 
+--- 在文件树当前焦点目录创建新笔记。
+-- 无法识别文件树焦点时回退到默认 notes_subdir，并给出提示。
 function M.new_note_here()
   local core = require("miniobsidian")
   local dir = require("miniobsidian.explorer").current_dir()
@@ -79,6 +105,9 @@ function M.new_note_here()
   end)
 end
 
+--- 实际执行笔记创建与打开。
+-- 生成安全路径后使用 no-replace 语义写入 frontmatter，更新缓存，
+-- 打开 buffer 并将光标移到标题下一行，最后触发 after_note_open 回调。
 ---@param title string
 ---@param dir? string
 ---@param opts? {switch_root?: boolean, note_id?: string}
@@ -91,6 +120,7 @@ function M.create(title, dir, opts)
   end
 
   local core = require("miniobsidian")
+  -- 构造默认 frontmatter：title、date、tags 以及一级标题
   local frontmatter = table.concat({
     "---",
     "title: " .. core.yaml_quote(title),
@@ -102,6 +132,7 @@ function M.create(title, dir, opts)
     "",
   }, "\n")
 
+  -- 使用排他创建，避免覆盖已有笔记
   local is_new, create_err = require("miniobsidian.fs").create_exclusive(path, frontmatter)
   if is_new == nil then
     core.notify("创建笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
@@ -114,6 +145,7 @@ function M.create(title, dir, opts)
   vim.schedule(function()
     vim.cmd("edit " .. vim.fn.fnameescape(path))
     if is_new then
+      -- 新建笔记时将光标定位到标题下一行
       local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
       for index, line in ipairs(lines) do
         if line:match("^# ") then

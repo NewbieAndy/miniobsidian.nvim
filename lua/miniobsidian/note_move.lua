@@ -118,8 +118,8 @@ local function move_prompt(on_confirm)
     completion = "customlist,v:lua.require'miniobsidian.note_move'.complete_directories",
   }
 
-  -- `win.keys` is Snacks-specific. Native vim.ui.input converts its options to
-  -- VimL and rejects Snacks' mixed array/dictionary key specs with E5100.
+  -- `win.keys` 是 Snacks 输入框特有的选项。原生 vim.ui.input 会把 opts 转成
+  -- VimL，遇到 Snacks 这种数组与字典混用的键 spec 时会报 E5100。
   if package.loaded.snacks ~= nil then
     local ok, snacks_input = pcall(require, "snacks.input")
     if ok and type(snacks_input.input) == "function" then
@@ -447,8 +447,8 @@ local function build_updates(notes, vault, source, target)
   local total_links = 0
   local total_identity_fields = 0
 
-  -- Prefer the scanner's Note ID so internal symlink aliases use the same identity
-  -- as wikilink.resolve(). Fall back to the source's validated logical path.
+  -- 优先使用 scanner 解析出的 Note ID，这样内部符号链接别名与 wikilink.resolve()
+  -- 使用的身份保持一致。解析失败时回退到 source 已经校验过的 logical path。
   for _, note_path in ipairs(notes) do
     if same_path(note_path, source.path) then
       local scanned = path_policy.resolve(vault, note_path, { allow_absolute = true })
