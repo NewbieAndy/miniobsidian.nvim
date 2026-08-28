@@ -49,7 +49,7 @@ lazy.nvim plugin specification:
       "ObsidianSwitch", "ObsidianSearch", "ObsidianBacklinks",
       "ObsidianMove", "ObsidianRename",
       "ObsidianTemplate",
-      "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
+      "ObsidianNewTemplate", "ObsidianPasteFile", "ObsidianToday",
       "ObsidianSetup",
     },
     config = function()
@@ -145,6 +145,7 @@ Synchronized configuration:
   .obsidian/app.json
       newFileLocation="root" -> notes_subdir=""
       newFileLocation="folder" plus newFileFolderPath -> notes_subdir
+      attachmentFolderPath (non-empty, not ".") -> attachments_folder
 
   .obsidian/daily-notes.json
       folder   -> dailies_folder
@@ -237,10 +238,12 @@ blink.cmp provider:
 :ObsidianNewTemplate [name]
     Create or open a template without replacing an existing target.
 
-                                                          *:ObsidianPasteImg*
-:ObsidianPasteImg [name]
-    Paste a macOS clipboard image into attachments_folder and insert a relative
-    Markdown link. Collisions use an incremented name and exclusive publication.
+                                                          *:ObsidianPasteFile*
+:ObsidianPasteFile [name]
+    Paste macOS clipboard files or images into attachments_folder and insert a
+    relative Markdown link. Images use `![](path)`, other files use
+    `[filename](path)`. Collisions use an incremented name and exclusive
+    publication.
 
                                                              *:ObsidianToday*
 :ObsidianToday[!]
@@ -349,7 +352,7 @@ Other workflows:
   require("miniobsidian.link").follow_link_or_toggle()
   require("miniobsidian.checkbox").toggle()
   require("miniobsidian.checkbox").clear()
-  require("miniobsidian.image").paste_img()
+  require("miniobsidian.image").paste_file()
 <
 
 No-argument calls use interactive input or defaults. resolve_today() is a

@@ -1,56 +1,100 @@
 -- ============================================================
 -- 文件名：image.lua
--- 模块职责：将 macOS 剪贴板中的图片保存到 vault 的附件目录，
---           并在当前 buffer 的光标后插入对应的 Markdown 图片链接。
---           使用 macOS 内置的 osascript（JXA）实现，无需安装任何第三方工具。
---           • 自动检测剪贴板图片格式（PNG / JPEG / GIF），按原始格式保存。
---           • 非 macOS 系统调用 paste_img() 时发出友好提示，不报错不崩溃。
+-- 模块职责：将 macOS 剪贴板中的文件或图片保存到 vault 的附件目录，
+--           并在当前 buffer 的光标后插入对应的 Markdown 链接。
+--           支持以下两类来源：
+--           • Finder 中复制的任意文件（保留原格式，支持多文件）
+--           • 截图 / 浏览器中复制的图片（通过 NSImage 转换）
+--           使用 macOS 内置的 osascript（JXA）实现，无需安装第三方工具。
 -- 依赖关系：miniobsidian（config）、macOS 内置 osascript（仅 macOS 有效）
---           lua/miniobsidian/scripts/paste_image.js（JXA 脚本）
+--           lua/miniobsidian/scripts/paste_file.js（JXA 脚本）
 --           Neovim >= 0.10（vim.system API）
--- 对外 API：M.paste_img(name)
+-- 对外 API：M.paste_file(name)、M.resolve_for_snacks(_, src)
 -- ============================================================
 local M = {}
 local path_policy = require("miniobsidian.path")
+local fs = require("miniobsidian.fs")
 
 -- ── 平台检测（模块加载时一次性完成，避免每次调用重复检测）────────
 local IS_MACOS = vim.fn.has("mac") == 1
 
--- JXA 脚本的绝对路径：与本模块同目录下的 scripts/paste_image.js。
+-- JXA 脚本的绝对路径：与本模块同目录下的 scripts/paste_file.js。
 -- debug.getinfo(1, "S").source 返回 "@/absolute/path/to/image.lua"，
 -- sub(2) 去掉 "@" 前缀，match 取出目录部分。
 -- 这样无论插件被安装在哪个路径都能正确定位脚本。
 local _M_DIR = debug.getinfo(1, "S").source:sub(2):match("(.*[/\\])")
-local PASTE_SCRIPT = _M_DIR .. "scripts/paste_image.js"
-local IMAGE_EXTENSIONS = { "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tiff", "bmp", "svg" }
+local PASTE_SCRIPT = _M_DIR .. "scripts/paste_file.js"
 
----为图片选择不会覆盖现有文件的名称。
----@param directory string 附件目录绝对路径
----@param requested string 已净化、不含扩展名的名称
+-- 图片扩展名集合，用于决定最终 Markdown 链接使用 ![](path) 还是 [文件名](path)
+local IMAGE_EXTENSIONS = {
+  png = true,
+  jpg = true,
+  jpeg = true,
+  gif = true,
+  webp = true,
+  heic = true,
+  heif = true,
+  tiff = true,
+  bmp = true,
+  svg = true,
+}
+
+--- 净化文件名主干：去掉路径分隔符、NUL、Windows 保留字符、路径遍历以及首尾空格/点。
+---@param name string
 ---@return string
-function M.unique_name(directory, requested)
-  local function available(name)
-    for _, ext in ipairs(IMAGE_EXTENSIONS) do
-      if vim.uv.fs_stat(path_policy.join(directory, name .. "." .. ext)) then
-        return false
-      end
-    end
-    return true
+local function sanitize_name(name)
+  name = tostring(name or "")
+  -- 替换各类文件系统不安全字符为连字符，保留中文等非 ASCII 字符
+  name = name:gsub('[<>:"/\\|?*%z]', "-")
+  -- 防止路径遍历
+  name = name:gsub("%.%.", "-")
+  -- 路径段不能以点或空格结尾
+  name = name:gsub("[%. ]+$", "")
+  if name == "" then
+    name = "file"
+  end
+  return name
+end
+
+--- 判断扩展名是否为图片格式。
+---@param ext string
+---@return boolean
+local function is_image(ext)
+  return ext ~= nil and ext ~= "" and IMAGE_EXTENSIONS[ext:lower()] == true
+end
+
+--- 为 directory 生成不重复的 filename。
+-- 仅按目标扩展名作精确冲突检测：例如 diagram.png 已存在时，
+-- diagram.jpg 仍可使用，避免不同格式的同名文件被误加后缀。
+---@param directory string 目标目录绝对路径
+---@param filename string 期望文件名（含扩展名）
+---@return string
+function M.unique_filename(directory, filename)
+  local function exists(path)
+    return vim.uv.fs_stat(path_policy.join(directory, path)) ~= nil
   end
 
-  if available(requested) then
-    return requested
+  if not exists(filename) then
+    return filename
+  end
+
+  local stem, ext = filename:match("^(.*)%.([^.]+)$")
+  if not stem then
+    stem = filename
+    ext = nil
   end
   local suffix = 1
-  while not available(requested .. "-" .. suffix) do
+  while true do
+    local candidate = stem .. "-" .. suffix .. (ext and "." .. ext or "")
+    if not exists(candidate) then
+      return candidate
+    end
     suffix = suffix + 1
   end
-  return requested .. "-" .. suffix
 end
 
 --- 计算从 from_dir 到 to_path 的相对路径（纯 Lua 实现，无外部依赖）。
 -- 算法：找最长公共目录前缀，用 "../" 向上回退，拼接目标剩余路径。
--- 提升为模块级函数，避免在每次 do_paste 调用时重复创建函数对象。
 ---@param from_dir string 起始目录（绝对路径）
 ---@param to_path  string 目标文件（绝对路径）
 ---@return string
@@ -82,33 +126,48 @@ local function relative_path(from_dir, to_path)
   return table.concat(result, "/")
 end
 
---- 将剪贴板图片保存到 vault 附件目录，并在光标后插入 Markdown 图片链接。
+--- 从原始文件名中分离出主干与扩展名。
+---@param original_name string|nil
+---@return string|nil stem
+---@return string|nil ext
+local function parse_original_name(original_name)
+  if not original_name or original_name == "" then
+    return nil, nil
+  end
+  local stem = original_name:match("^(.*)%.[^.]*$") or original_name
+  local ext = original_name:match("%.([^.]+)$") or ""
+  return stem, ext:lower()
+end
+
+--- 将剪贴板中的文件或图片保存到 vault 附件目录，并在光标后插入 Markdown 链接。
 --
 -- 完整流程：
 --   1. 平台检测：非 macOS 友好提示并退出。
 --   2. 若 name 为 nil，弹出输入框让用户命名（留空则使用时间戳）。
---   3. 净化文件名（移除路径分隔符、防止路径遍历）。
---   4. 确保附件目录存在，调用 osascript JXA 脚本保存图片。
---   5. 从 stdout 读取实际使用的扩展名（png / jpg / gif）。
---   6. 计算相对路径，在光标下方插入 `![](relative/path.ext)` 链接。
+--   3. 解析并创建附件目录，以及本次粘贴专用的临时子目录。
+--   4. 调用 osascript JXA 脚本，由脚本把剪贴板内容写入临时目录并返回 JSON 元数据。
+--   5. 遍历返回列表：净化文件名、去重、硬链接发布、生成相对路径、组装 Markdown。
+--   6. 批量插入光标下方，并清理临时目录。
 --
 -- 边界情况：
 --   • 非 macOS：友好提示，不报错。
---   • 剪贴板无图片：osascript 返回非零退出码，发出 WARN 并退出。
+--   • 剪贴板无文件/图片：osascript 返回非零退出码，发出 WARN 并退出。
+--   • 多文件：每个文件生成独立链接，按原始文件名命名。
+--   • 单文件 + 用户命名：使用用户命名，扩展名由剪贴板内容决定。
 --   • buffer 未保存（无路径）：使用 vault 相对路径作为回退。
---   • osascript 脚本缺失（安装损坏）：发出 ERROR 并退出。
----@param name? string 图片文件名（不含扩展名；为 nil 时弹出输入框）
-function M.paste_img(name)
+--   • osascript 脚本缺失：发出 ERROR 并退出。
+---@param name? string 文件名主干（不含扩展名；为 nil 时弹出输入框）
+function M.paste_file(name)
   -- 非 macOS 系统：功能不可用，友好提示后静默返回
   if not IS_MACOS then
-    vim.notify("[miniobsidian] 图片粘贴功能仅支持 macOS", vim.log.levels.WARN)
+    vim.notify("[miniobsidian] 粘贴附件功能仅支持 macOS", vim.log.levels.WARN)
     return
   end
 
   -- 防御性检查：脚本文件是否存在（安装损坏时的兜底）
   if vim.fn.filereadable(PASTE_SCRIPT) == 0 then
     vim.notify(
-      "[miniobsidian] 内部错误：找不到 paste_image.js，请重新安装插件\n路径: " .. PASTE_SCRIPT,
+      "[miniobsidian] 内部错误：找不到 paste_file.js，请重新安装插件\n路径: " .. PASTE_SCRIPT,
       vim.log.levels.ERROR
     )
     return
@@ -116,20 +175,10 @@ function M.paste_img(name)
 
   local cfg = require("miniobsidian").config
 
-  --- 执行图片保存与链接插入的核心逻辑。
-  ---@param img_name string 用户输入的文件名（prompt 已预填时间戳，此处仅作空值兜底）
-  local function do_paste(img_name)
-    -- prompt 已预填时间戳默认值；此处仅在极少数空值情形下作最终兜底
-    if not img_name or img_name == "" then
-      img_name = os.date("image-%Y%m%d-%H%M%S")
-    end
-
-    -- 净化文件名：过滤路径分隔符、NUL 字节与路径遍历
-    img_name = img_name:gsub("[/\\%z]", "-"):gsub("%.%.", "-")
-
-    -- 用户若误带扩展名（如 "photo.png"），剔除以避免双后缀
-    img_name = img_name:gsub("%.[a-zA-Z0-9]+$", "")
-
+  --- 执行附件保存与链接插入的核心逻辑。
+  ---@param file_name string 用户输入的文件名主干（prompt 已预填时间戳，此处仅作空值兜底）
+  local function do_paste(file_name)
+    -- 解析附件目录（允许 attachments_folder 为空，即直接放在 vault 根目录）
     local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.attachments_folder, { allow_empty = true })
     if not directory then
       vim.notify("[miniobsidian] 附件目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
@@ -137,90 +186,125 @@ function M.paste_img(name)
     end
     local attach_dir = directory.path
     vim.fn.mkdir(attach_dir, "p")
-    img_name = M.unique_name(attach_dir, img_name)
 
-    -- base_path 不含扩展名：JXA 脚本检测格式后追加正确后缀并返回
-    local logical = directory.logical == "" and img_name or (directory.logical .. "/" .. img_name)
-    local target, target_err = path_policy.resolve(cfg.vault_path, logical)
-    if not target then
-      vim.notify("[miniobsidian] 附件路径不安全: " .. tostring(target_err), vim.log.levels.ERROR)
-      return
-    end
-    local base_path = target.path
-    local temp_base = path_policy.join(attach_dir, ".miniobsidian-paste-" .. tostring(vim.uv.hrtime()))
+    -- 在附件目录下创建本次粘贴专用的临时目录，确保与最终目标在同一文件系统，
+    -- 方便后续使用硬链接原子发布。
+    local temp_dir = path_policy.join(attach_dir, ".miniobsidian-paste-" .. tostring(vim.uv.hrtime()))
+    vim.fn.mkdir(temp_dir, "p")
 
     -- ── 调用 osascript JXA 脚本 ────────────────────────────
+    -- 脚本负责把剪贴板内容写入 temp_dir，并通过 stdout 返回 JSON 元数据数组。
     -- 使用列表形式传参，路径中的空格等特殊字符由 OS 进程 API 处理，无需 shell 转义。
-    -- :wait() 同步等待（~120ms），对用户主动触发的粘贴操作完全可接受。
-    local proc = vim
-      .system(
-        { "osascript", "-l", "JavaScript", PASTE_SCRIPT, temp_base },
-        { text = true } -- 确保 stdout/stderr 作为字符串返回
-      )
-      :wait()
+    local proc = vim.system({ "osascript", "-l", "JavaScript", PASTE_SCRIPT, temp_dir }, { text = true }):wait()
 
     if proc.code ~= 0 then
+      vim.fn.delete(temp_dir, "rf")
       -- 解析 stderr 中的错误关键字，给出可读提示
       local err = proc.stderr or ""
-      if err:find("NO_IMAGE") then
-        vim.notify("[miniobsidian] 剪贴板中没有图片（或格式不支持）", vim.log.levels.WARN)
-      elseif err:find("FILE_EXISTS") then
-        vim.notify("[miniobsidian] 图片目标刚被其他进程创建，请重试", vim.log.levels.WARN)
-      elseif err:find("NOT_IMAGE_FILE") then
-        vim.notify("[miniobsidian] 剪贴板中的文件不是图片格式", vim.log.levels.WARN)
+      if err:find("NO_CONTENT") then
+        vim.notify("[miniobsidian] 剪贴板中没有文件或图片（或格式不支持）", vim.log.levels.WARN)
+      elseif err:find("READ_FAILED") then
+        vim.notify("[miniobsidian] 读取源文件失败，请检查文件权限", vim.log.levels.ERROR)
       elseif err:find("WRITE_FAILED") then
-        vim.notify("[miniobsidian] 图片写入失败，请检查目录权限: " .. attach_dir, vim.log.levels.ERROR)
-      elseif err:find("CONVERT_FAILED") or err:find("BITMAP_FAILED") or err:find("TIFF_FAILED") then
+        vim.notify(
+          "[miniobsidian] 写入临时文件失败，请检查目录权限: " .. attach_dir,
+          vim.log.levels.ERROR
+        )
+      elseif err:find("TIFF_FAILED") or err:find("BITMAP_FAILED") or err:find("CONVERT_FAILED") then
         vim.notify(
           "[miniobsidian] 图片格式转换失败，剪贴板内容可能不是标准图片",
           vim.log.levels.ERROR
         )
       else
-        -- 兜底：截取 stderr 第一行作为错误信息
         local first_line = err:match("[^\n]+") or "未知错误"
-        vim.notify("[miniobsidian] 图片保存失败: " .. first_line, vim.log.levels.ERROR)
+        vim.notify("[miniobsidian] 附件保存失败: " .. first_line, vim.log.levels.ERROR)
       end
       return
     end
 
-    -- 从 stdout 读取实际扩展名（"png" / "jpg" / "gif"）
-    -- 使用模式匹配去除首尾空白，默认 "png" 作为安全兜底；:lower() 防御意外大写
-    local ext = ((proc.stdout or ""):match("^%s*(%a+)%s*$") or "png"):lower()
-    local img_file = img_name .. "." .. ext
-    local abs_path = base_path .. "." .. ext
-    local temp_path = temp_base .. "." .. ext
-
-    -- JXA 先写入同目录临时文件，再通过 hard link 排他发布。
-    -- hard link 在目标已存在时返回 EEXIST，因此即使发生并发竞争也不会覆盖原文件。
-    local published, publish_err = require("miniobsidian.fs").link_exclusive(temp_path, abs_path)
-    require("miniobsidian.fs").unlink(temp_path)
-    if published == false then
-      vim.notify("[miniobsidian] 图片目标已存在，请重试: " .. abs_path, vim.log.levels.WARN)
-      return
-    elseif published == nil then
-      vim.notify("[miniobsidian] 图片发布失败: " .. tostring(publish_err), vim.log.levels.ERROR)
+    -- 解析 JXA 返回的 JSON 元数据数组
+    local decode_ok, items = pcall(vim.json.decode, proc.stdout or "")
+    if not decode_ok or type(items) ~= "table" or #items == 0 then
+      vim.fn.delete(temp_dir, "rf")
+      vim.notify("[miniobsidian] 无法解析剪贴板返回数据", vim.log.levels.ERROR)
       return
     end
 
-    -- ── 计算相对路径 ──────────────────────────────────────
-    -- 相对路径可在 vault 移动位置后继续有效，与 Obsidian 桌面端行为一致。
-    local buf_dir = vim.fn.expand("%:p:h")
-    local rel_path
+    local md_lines = {}
+    local saved_files = {}
 
-    if buf_dir and buf_dir ~= "" then
-      rel_path = relative_path(buf_dir, abs_path)
-    else
-      -- buffer 未保存时回退：使用相对于 vault 根的路径
-      rel_path = directory.logical == "" and img_file or (directory.logical .. "/" .. img_file)
+    for _, item in ipairs(items) do
+      local ext = (item.ext or ""):lower()
+      local original_stem = parse_original_name(item.original_name)
+      local stem
+
+      -- 命名优先级：单文件 + 用户输入 > 原始文件名 > 时间戳
+      if #items == 1 and file_name and file_name ~= "" then
+        stem = file_name
+      elseif original_stem and original_stem ~= "" then
+        stem = original_stem
+      else
+        stem = os.date("attachment-%Y%m%d-%H%M%S")
+      end
+
+      stem = sanitize_name(stem)
+
+      local filename = stem .. (ext ~= "" and "." .. ext or "")
+      filename = M.unique_filename(attach_dir, filename)
+
+      local abs_path = path_policy.join(attach_dir, filename)
+      local temp_path = item.temp_path
+
+      -- JXA 先写入临时文件，再通过 hard link 排他发布。
+      -- hard link 在目标已存在时返回 EEXIST，因此即使发生并发竞争也不会覆盖原文件。
+      local published, publish_err = fs.link_exclusive(temp_path, abs_path)
+      fs.unlink(temp_path)
+
+      if published == false then
+        vim.notify("[miniobsidian] 附件目标已存在，请重试: " .. abs_path, vim.log.levels.WARN)
+      elseif published == nil then
+        vim.notify("[miniobsidian] 附件发布失败: " .. tostring(publish_err), vim.log.levels.ERROR)
+      else
+        table.insert(saved_files, abs_path)
+
+        -- ── 计算相对路径 ──────────────────────────────────────
+        -- 相对路径可在 vault 移动位置后继续有效，与 Obsidian 桌面端行为一致。
+        local buf_dir = vim.fn.expand("%:p:h")
+        local rel_path
+        if buf_dir and buf_dir ~= "" then
+          rel_path = relative_path(buf_dir, abs_path)
+        else
+          rel_path = directory.logical == "" and filename or (directory.logical .. "/" .. filename)
+        end
+
+        -- 图片使用 ![](path)，其他文件使用 [文件名](path)
+        local link
+        if is_image(ext) then
+          link = string.format("![](%s)", rel_path)
+        else
+          link = string.format("[%s](%s)", filename, rel_path)
+        end
+        table.insert(md_lines, link)
+      end
     end
 
-    -- 插入 Markdown 图片链接到光标下方，并将光标移到新行
-    local md_link = string.format("![](%s)", rel_path)
-    local row = vim.api.nvim_win_get_cursor(0)[1]
-    vim.api.nvim_buf_set_lines(0, row, row, false, { md_link })
-    vim.api.nvim_win_set_cursor(0, { row + 1, 0 })
+    -- 清理本次粘贴的临时目录（包含未被链接的残留文件）
+    vim.fn.delete(temp_dir, "rf")
 
-    vim.notify("[miniobsidian] 图片已保存: " .. abs_path, vim.log.levels.INFO)
+    -- 批量插入生成的 Markdown 链接到光标下方，并将光标移到新行末尾
+    if #md_lines > 0 then
+      local row = vim.api.nvim_win_get_cursor(0)[1]
+      vim.api.nvim_buf_set_lines(0, row, row, false, md_lines)
+      vim.api.nvim_win_set_cursor(0, { row + #md_lines, 0 })
+    end
+
+    if #saved_files > 0 then
+      local msg = "[miniobsidian] 已保存 " .. #saved_files .. " 个附件"
+      if #saved_files == 1 then
+        msg = "[miniobsidian] 附件已保存: " .. saved_files[1]
+      end
+      vim.notify(msg, vim.log.levels.INFO)
+    end
   end
 
   -- 根据参数决定是否弹出交互输入框
@@ -228,8 +312,8 @@ function M.paste_img(name)
     do_paste(name)
   else
     vim.ui.input({
-      prompt = "图片文件名（不含扩展名）: ",
-      default = os.date("image-%Y%m%d-%H%M%S"),
+      prompt = "附件文件名（不含扩展名）: ",
+      default = os.date("attachment-%Y%m%d-%H%M%S"),
     }, function(input)
       if input ~= nil then
         do_paste(input)

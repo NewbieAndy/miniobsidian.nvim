@@ -48,7 +48,7 @@ lazy.nvim 插件配置：
       "ObsidianSwitch", "ObsidianSearch", "ObsidianBacklinks",
       "ObsidianMove", "ObsidianRename",
       "ObsidianTemplate",
-      "ObsidianNewTemplate", "ObsidianPasteImg", "ObsidianToday",
+      "ObsidianNewTemplate", "ObsidianPasteFile", "ObsidianToday",
       "ObsidianSetup",
     },
     config = function()
@@ -142,6 +142,7 @@ Vault 边界检查。
   .obsidian/app.json
       newFileLocation="root" -> notes_subdir=""
       newFileLocation="folder" 加 newFileFolderPath -> notes_subdir
+      attachmentFolderPath（非空、非 "."）-> attachments_folder
 
   .obsidian/daily-notes.json
       folder   -> dailies_folder
@@ -228,9 +229,10 @@ blink.cmp provider：
 :ObsidianNewTemplate [名称]
     创建或打开模板，不覆盖已有目标。
 
-                                   *miniobsidian-zh-command-paste-img*
-:ObsidianPasteImg [名称]
-    在 macOS 粘贴剪贴板图片，保存到 attachments_folder 并插入相对链接。
+                                   *miniobsidian-zh-command-paste-file*
+:ObsidianPasteFile [名称]
+    在 macOS 粘贴剪贴板文件或图片，保存到 attachments_folder 并插入相对链接。
+    图片使用 ![](path)，其他文件使用 [文件名](path)。
     同名文件自动递增，并以排他方式发布。
 
                                        *miniobsidian-zh-command-today*
@@ -334,7 +336,7 @@ BMP 或 SVG；截图和浏览器图片输出 PNG/JPG/GIF。若名称已被任一
   require("miniobsidian.link").follow_link_or_toggle()
   require("miniobsidian.checkbox").toggle()
   require("miniobsidian.checkbox").clear()
-  require("miniobsidian.image").paste_img()
+  require("miniobsidian.image").paste_file()
 <
 
 上述无参调用使用交互输入或默认值。resolve_today() 是只读规划接口，返回

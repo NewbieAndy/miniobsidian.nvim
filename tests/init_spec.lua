@@ -60,6 +60,28 @@ describe("miniobsidian init", function()
     helpers.cleanup(parent)
   end)
 
+  it("syncs attachments_folder from Obsidian and lets user config win", function()
+    local parent = vim.fn.tempname()
+    vim.fn.mkdir(parent .. "/Personal/.obsidian", "p")
+    vim.fn.writefile({ '{"attachmentFolderPath":"Media"}' }, parent .. "/Personal/.obsidian/app.json")
+    local core = require("miniobsidian")
+
+    -- 用户未显式设置时，取 Obsidian 配置
+    assert.is_true(core.setup({ vaults_parent = parent, default_vault = "Personal", auto_discover = false }))
+    assert.equals("Media", core.config.attachments_folder)
+
+    -- 用户显式设置时，覆盖 Obsidian 配置
+    assert.is_true(core.setup({
+      vaults_parent = parent,
+      default_vault = "Personal",
+      auto_discover = false,
+      attachments_folder = "MyAssets",
+    }))
+    assert.equals("MyAssets", core.config.attachments_folder)
+
+    helpers.cleanup(parent)
+  end)
+
   it("rejects invalid enum and Vault-relative path settings", function()
     local core = require("miniobsidian")
     local config = core.default_config()

@@ -70,7 +70,7 @@ lazy.nvim example:
     "ObsidianRename",
     "ObsidianTemplate",
     "ObsidianNewTemplate",
-    "ObsidianPasteImg",
+    "ObsidianPasteFile",
     "ObsidianToday",
     "ObsidianSetup",
   },
@@ -146,6 +146,7 @@ With `sync_obsidian_config=true`, the plugin reads only:
 - `.obsidian/app.json`
   - `newFileLocation="root"` → `notes_subdir=""`
   - `newFileLocation="folder"` + `newFileFolderPath` → `notes_subdir`
+  - `attachmentFolderPath` (non-empty, not `.`) → `attachments_folder`
 - `.obsidian/daily-notes.json`
   - `folder` → `dailies_folder`
   - supported Moment `format` → Lua `daily_date_format`
@@ -203,7 +204,7 @@ order.
 | `:ObsidianRename [new-name]` | Rename the current Markdown note or file-tree selection in place and update references; `.md` is optional |
 | `:ObsidianTemplate` | Select, render, and insert a recursive template |
 | `:ObsidianNewTemplate [name]` | Create or open a template without replacing it |
-| `:ObsidianPasteImg [name]` | Paste an image on macOS and insert a relative Markdown link |
+| `:ObsidianPasteFile [name]` | Paste macOS clipboard files or images into attachments_folder and insert a relative Markdown link; images use `![](path)`, other files use `[filename](path)` |
 | `:ObsidianToday[!]` | Open or create today's note; `!` passes `switch_root=true` |
 | `:ObsidianSetup` | Call `setup()` with defaults, mainly for tests or setups without a plugin manager |
 
@@ -404,7 +405,7 @@ require("miniobsidian.link").link_at_cursor()
 require("miniobsidian.link").follow_link_or_toggle()
 require("miniobsidian.checkbox").toggle()
 require("miniobsidian.checkbox").clear()
-require("miniobsidian.image").paste_img()
+require("miniobsidian.image").paste_file()
 ```
 
 The no-argument calls above use interactive input or defaults. `resolve_today()` is a
@@ -424,7 +425,7 @@ vim.keymap.set("n", "<leader>nn", function() require("miniobsidian.note").new_no
 vim.keymap.set("n", "<leader>no", function() require("miniobsidian.note").quick_switch() end)
 vim.keymap.set("n", "<leader>ns", function() require("miniobsidian.note").search() end)
 vim.keymap.set("n", "<leader>nd", function() require("miniobsidian.daily").open_today() end)
-vim.keymap.set("n", "<leader>np", function() require("miniobsidian.image").paste_img() end)
+vim.keymap.set("n", "<leader>np", function() require("miniobsidian.image").paste_file() end)
 ```
 
 The plugin defines no keymaps.

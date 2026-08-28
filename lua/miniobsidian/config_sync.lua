@@ -143,20 +143,21 @@ end
 
 --- 读取指定 vault 内的 Obsidian 配置文件，返回可同步到插件配置的覆盖值。
 -- 读取的文件：
---   • .obsidian/app.json        → notes_subdir（newFileFolderPath）
+--   • .obsidian/app.json        → notes_subdir（newFileFolderPath）、attachments_folder（attachmentFolderPath）
 --   • .obsidian/daily-notes.json → dailies_folder、daily_date_format
 -- 用户手动配置的值优先级高于自动同步；调用方负责过滤。
 ---@param vault_path string vault 的绝对路径
----@return {notes_subdir?: string, dailies_folder?: string, daily_date_format?: string, daily_template?: string} 覆盖值表
+---@return {notes_subdir?: string, dailies_folder?: string, daily_date_format?: string, daily_template?: string, attachments_folder?: string} 覆盖值表
 function M.read_vault_config(vault_path)
   local overrides = {
     notes_subdir = "Notes",
     dailies_folder = "",
     daily_date_format = "%Y-%m-%d",
     daily_template = "",
+    attachments_folder = "Assets",
   }
 
-  -- 读取 app.json：新笔记默认存放位置
+  -- 读取 app.json：新笔记默认存放位置 + 附件目录
   local app_config_path = vault_path .. "/.obsidian/app.json"
   if vim.fn.filereadable(app_config_path) == 1 then
     local ok, app_config = M._read_json_file(app_config_path)
@@ -165,6 +166,15 @@ function M.read_vault_config(vault_path)
         overrides.notes_subdir = app_config.newFileFolderPath
       elseif app_config.newFileLocation == "root" then
         overrides.notes_subdir = ""
+      end
+
+      -- 附件目录：attachmentFolderPath（相对 vault 根，如 "Assets"、"media/attachments"）。
+      -- "." 或 "./" 表示“与当前笔记同目录”，无法映射为固定目录，故跳过以保留默认值。
+      if type(app_config.attachmentFolderPath) == "string" then
+        local attachment = app_config.attachmentFolderPath:gsub("\\", "/"):gsub("/+$", "")
+        if attachment ~= "" and attachment ~= "." then
+          overrides.attachments_folder = attachment
+        end
       end
     end
   end

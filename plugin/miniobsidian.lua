@@ -136,18 +136,19 @@ end, {
   desc = "新建模板文件",
 })
 
---- :ObsidianPasteImg [name]
--- 将 macOS 剪贴板中的图片保存到附件目录并插入 Markdown 图片链接。
--- 自动检测图片格式（PNG / JPEG / GIF），按原始格式保存，无需安装额外工具。
+--- :ObsidianPasteFile [name]
+-- 将 macOS 剪贴板中的文件或图片保存到附件目录并插入 Markdown 链接。
+-- 支持 Finder 复制的任意文件（可多选）以及截图 / 浏览器复制的图片。
+-- 图片自动检测格式（PNG / JPEG / GIF）并按原始格式保存；其他文件直接复制。
 -- name 可选（不含扩展名）：
---   • 提供 name：直接保存为 {name}.{ext}。
---   • 不提供：弹出 vim.ui.input 让用户命名（留空则使用时间戳）。
+--   • 提供 name：单文件时直接保存为 {name}.{ext}；多文件时忽略。
+--   • 不提供：弹出 vim.ui.input 让用户命名（留空则使用时间戳或原始文件名）。
 -- 前置条件：仅 macOS 支持；非 macOS 系统调用会发出友好提示，不报错。
-vim.api.nvim_create_user_command("ObsidianPasteImg", function(opts)
-  require("miniobsidian.image").paste_img(opts.args ~= "" and opts.args or nil)
+vim.api.nvim_create_user_command("ObsidianPasteFile", function(opts)
+  require("miniobsidian.image").paste_file(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc = "粘贴剪贴板图片（macOS）",
+  desc = "粘贴剪贴板文件或图片（macOS）",
 })
 
 --- :ObsidianToday[!]

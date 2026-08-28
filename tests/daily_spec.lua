@@ -28,6 +28,7 @@ describe("daily", function()
     assert.equals("", config.dailies_folder)
     assert.equals("%Y-%m-%d", config.daily_date_format)
     assert.equals("", config.daily_template)
+    assert.equals("Assets", config.attachments_folder)
   end)
 
   it("rejects an escaping daily directory", function()

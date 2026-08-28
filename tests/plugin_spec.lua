@@ -29,7 +29,7 @@ describe("plugin entry", function()
       "ObsidianRename",
       "ObsidianTemplate",
       "ObsidianNewTemplate",
-      "ObsidianPasteImg",
+      "ObsidianPasteFile",
       "ObsidianToday",
       "ObsidianSetup",
     }) do

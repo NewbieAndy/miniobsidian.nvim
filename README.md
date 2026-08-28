@@ -65,7 +65,7 @@ lazy.nvim 示例：
     "ObsidianRename",
     "ObsidianTemplate",
     "ObsidianNewTemplate",
-    "ObsidianPasteImg",
+    "ObsidianPasteFile",
     "ObsidianToday",
     "ObsidianSetup",
   },
@@ -140,6 +140,7 @@ Windows ADS、保留设备名或以点/空格结尾的路径段。`daily_templat
 - `.obsidian/app.json`
   - `newFileLocation="root"` → `notes_subdir=""`
   - `newFileLocation="folder"` + `newFileFolderPath` → `notes_subdir`
+  - `attachmentFolderPath`（非空、非 `.`）→ `attachments_folder`
 - `.obsidian/daily-notes.json`
   - `folder` → `dailies_folder`
   - 支持的 Moment `format` → Lua `daily_date_format`
@@ -194,7 +195,7 @@ Note 前中止操作。
 | `:ObsidianRename [新文件名]` | 文件名可选 | 在原目录重命名当前 Markdown 或文件树选中的笔记并更新引用；`.md` 可省略 |
 | `:ObsidianTemplate` | 无 | 递归选择模板，渲染后插入光标下一行 |
 | `:ObsidianNewTemplate [名称]` | 名称可选 | 创建或打开模板，不覆盖已有模板 |
-| `:ObsidianPasteImg [名称]` | 名称可选 | macOS 粘贴图片并插入相对 Markdown 链接 |
+| `:ObsidianPasteFile [名称]` | 名称可选 | macOS 粘贴剪贴板文件或图片并插入相对 Markdown 链接；图片用 `![](path)`，其他文件用 `[文件名](path)` |
 | `:ObsidianToday[!]` | 无 | 打开或创建今日笔记；`!` 传递 `switch_root=true` |
 | `:ObsidianSetup` | 无 | 使用默认配置调用 `setup()`，通常只用于测试或无插件管理器环境 |
 
@@ -390,7 +391,7 @@ require("miniobsidian.link").link_at_cursor()
 require("miniobsidian.link").follow_link_or_toggle()
 require("miniobsidian.checkbox").toggle()
 require("miniobsidian.checkbox").clear()
-require("miniobsidian.image").paste_img()
+require("miniobsidian.image").paste_file()
 ```
 
 上面的无参调用会使用交互输入或默认值；`resolve_today()` 是只读规划接口，返回
@@ -409,7 +410,7 @@ vim.keymap.set("n", "<leader>nn", function() require("miniobsidian.note").new_no
 vim.keymap.set("n", "<leader>no", function() require("miniobsidian.note").quick_switch() end)
 vim.keymap.set("n", "<leader>ns", function() require("miniobsidian.note").search() end)
 vim.keymap.set("n", "<leader>nd", function() require("miniobsidian.daily").open_today() end)
-vim.keymap.set("n", "<leader>np", function() require("miniobsidian.image").paste_img() end)
+vim.keymap.set("n", "<leader>np", function() require("miniobsidian.image").paste_file() end)
 ```
 
 插件不预设任何按键。

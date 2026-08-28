@@ -102,6 +102,7 @@ local VAULT_SYNC_KEYS = {
   "dailies_folder",
   "daily_date_format",
   "daily_template",
+  "attachments_folder",
 }
 
 function M.default_config()
