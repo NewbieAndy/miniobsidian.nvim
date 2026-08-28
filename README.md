@@ -143,6 +143,12 @@ Windows ADS、保留设备名或以点/空格结尾的路径段。`daily_templat
   - `newFileLocation="root"` → `notes_subdir=""`
   - `newFileLocation="folder"` + `newFileFolderPath` → `notes_subdir`
   - `attachmentFolderPath`（非空、非 `.`）→ `attachments_folder`
+
+    > **注意：** 若当前 Vault 在 Obsidian 中设置了 `attachmentFolderPath`，同步后会
+    > 覆盖插件默认的 `attachments_folder = "Assets"`，`:ObsidianPasteFile` 会把文件
+    > 写入 Obsidian 配置的目录。如需固定使用插件默认值，请在 `setup()` 中显式设置
+    > `attachments_folder`，或在 Obsidian 中将附件目录留空/设为 `.`。
+
 - `.obsidian/daily-notes.json`
   - `folder` → `dailies_folder`
   - 支持的 Moment `format` → Lua `daily_date_format`

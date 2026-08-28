@@ -149,6 +149,13 @@ With `sync_obsidian_config=true`, the plugin reads only:
   - `newFileLocation="root"` → `notes_subdir=""`
   - `newFileLocation="folder"` + `newFileFolderPath` → `notes_subdir`
   - `attachmentFolderPath` (non-empty, not `.`) → `attachments_folder`
+
+    > **Note:** If the active Vault has `attachmentFolderPath` configured in Obsidian,
+    > synchronization will override the plugin default `attachments_folder = "Assets"`,
+    > and `:ObsidianPasteFile` will write files to the Obsidian-configured directory.
+    > To keep using the plugin default, set `attachments_folder` explicitly in
+    > `setup()`, or leave the Obsidian attachment directory empty / set to `.`.
+
 - `.obsidian/daily-notes.json`
   - `folder` → `dailies_folder`
   - supported Moment `format` → Lua `daily_date_format`
