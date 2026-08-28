@@ -11,10 +11,11 @@
 --           ObsidianSwitch / ObsidianSearch / ObsidianBacklinks /
 --           ObsidianMove / ObsidianRename /
 --           ObsidianTemplate /
---           ObsidianNewTemplate / ObsidianPasteImg / ObsidianToday /
+--           ObsidianNewTemplate / ObsidianPasteFile / ObsidianToday /
 --           ObsidianSetup
 -- 自定义事件：User MiniObsidianSetup（setup 完成后触发）
 --             User MiniObsidianVaultSwitch（切换 vault 后触发，data = {name, path}）
+--             User MiniObsidianNoteOpened（插件直接打开笔记后触发，data = {path, opts}）
 --             User MiniObsidianNoteMoved（移动及引用更新后触发）
 --             User MiniObsidianNoteRenamed（重命名及引用更新后触发）
 -- ============================================================

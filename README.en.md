@@ -3,11 +3,11 @@
 A lightweight, standalone Obsidian workflow plugin for Neovim. English · [中文](README.md)
 
 `miniobsidian.nvim` focuses on the editor experience: Vault discovery and switching,
-note creation and search, Wikilinks, templates, Daily Notes, checkboxes, and image
+note creation and search, Wikilinks, templates, Daily Notes, checkboxes, and file
 paste. It has no external CLI or Agent integration and does not coordinate writes
 across clients.
 
-> **Inspired by** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) — a full-featured Obsidian client for Neovim. `miniobsidian.nvim` takes a lighter approach: no Telescope dependency, no heavy event system, just the features you actually use every day. If you need a more complete, battle-tested solution, use that instead.
+> **Inspired by** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) — a full-featured Obsidian client for Neovim. `miniobsidian.nvim` takes a lighter approach: no Telescope dependency, a lightweight event model, just the features you actually use every day. If you need a more complete, battle-tested solution, use that instead.
 
 ## Features
 
@@ -22,10 +22,10 @@ across clients.
 - Cycle and clear checkboxes, including upgrading plain list items
 - Select recursive templates and render Obsidian-style date variables
 - Synchronize Obsidian's new-note and Daily Notes settings
-- Paste macOS clipboard images with collision-safe incrementing names
+- Paste macOS clipboard files or images with collision-safe incrementing names
 - Enforce Vault boundaries, symlink containment, hidden-directory policy, and
   cross-platform filename rules
-- Use no-replace publication for notes, templates, Daily Notes, and images
+- Use no-replace publication for notes, templates, Daily Notes, and files
 
 ## Scope
 
@@ -45,7 +45,7 @@ and reports I/O failures.
 - `snacks.nvim` for note switching and search, optional
 - `blink.cmp` for Wikilink and checkbox completion, optional
 - `ripgrep` for full-text search, optional
-- `osascript` for image paste, macOS only
+- `osascript` for clipboard file/image paste, macOS only
 
 Core Vault, note, template, Daily Note, link navigation, and checkbox workflows remain
 available without optional dependencies. Vault and template selectors fall back to
@@ -310,15 +310,16 @@ opens without reading its former template. A new file renders `daily_template`, 
 uses `daily_default_content` when no template is configured. Missing or ambiguous
 templates abort creation.
 
-## Image paste
+## Clipboard file paste
 
-Image paste is macOS-only. Finder images preserve PNG, JPEG, GIF, WEBP, HEIC, HEIF,
-TIFF, BMP, or SVG. Screenshots and browser images become PNG/JPG/GIF. Images are
-stored under `attachments_folder`, and the inserted link is relative to the note.
+macOS only. Finder-copied files of any type are copied into `attachments_folder`
+preserving their original format; images (PNG, JPEG, GIF, WEBP, HEIC, HEIF, TIFF,
+BMP, or SVG) are inserted as `![](path)`, while other files are inserted as
+`[filename](path)`. Screenshots and browser images are converted to PNG/JPG/GIF.
 
-If any supported image extension already uses the requested name, the plugin selects
-`name-1`, `name-2`, and so on. It writes to a same-directory temporary file and then
-publishes with exclusive no-replace semantics.
+If any supported extension already uses the requested name, the plugin selects
+`name-1`, `name-2`, and so on. Files are written to a same-directory temporary file
+and then published with exclusive no-replace semantics.
 
 ## Callbacks and events
 

@@ -3,10 +3,10 @@
 轻量、独立的 Obsidian 工作流 Neovim 插件。中文 · [English](README.en.md)
 
 `miniobsidian.nvim` 专注 Neovim 内的笔记体验：发现和切换 Vault、创建与搜索
-笔记、Wikilink、模板、Daily Note、Checkbox 和图片粘贴。插件不集成外部
+笔记、Wikilink、模板、Daily Note、Checkbox 和文件粘贴。插件不集成外部
 CLI 或 Agent，也不承担多个客户端之间的写入协调。
 
-> **灵感来源：** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) —— 一个功能完整的 Obsidian Neovim 客户端。`miniobsidian.nvim` 采用更轻量的设计哲学：无 Telescope 依赖、无复杂事件系统，只保留每天真正用到的功能。如需功能更全面、久经考验的方案，推荐使用该插件。
+> **灵感来源：** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) —— 一个功能完整的 Obsidian Neovim 客户端。`miniobsidian.nvim` 采用更轻量的设计哲学：无 Telescope 依赖、事件通知精简，只保留每天真正用到的功能。如需功能更全面、久经考验的方案，推荐使用该插件。
 
 ## 功能
 
@@ -20,9 +20,9 @@ CLI 或 Agent，也不承担多个客户端之间的写入协调。
 - Checkbox 状态循环、普通列表升级和 Checkbox 清除
 - 递归模板选择、模板创建和 Obsidian 风格日期变量
 - 同步 Obsidian 新笔记目录及 Daily Notes 目录、格式和模板
-- macOS 剪贴板图片粘贴；同名目标自动递增且不会覆盖已有图片
+- macOS 剪贴板文件粘贴（含图片）；同名目标自动递增且不会覆盖已有文件
 - Vault 路径边界、符号链接逃逸、隐藏目录和跨平台文件名检查
-- 笔记、模板、Daily Note 和图片均使用 no-replace 语义
+- 笔记、模板、Daily Note 和文件均使用 no-replace 语义
 
 ## 产品边界
 
@@ -41,7 +41,7 @@ Vault 会被拒绝；从 Obsidian 同步的配置会在应用前验证；创建�
 - `snacks.nvim`：笔记快速切换和全文搜索，可选
 - `blink.cmp`：Wikilink 与 Checkbox 补全，可选
 - `ripgrep`：全文搜索，可选
-- `osascript`：图片粘贴，仅 macOS
+- `osascript`：剪贴板文件/图片粘贴，仅 macOS
 
 没有安装可选依赖时，Vault、笔记、模板、Daily Note、Wikilink 跳转和 Checkbox
 等基础功能仍可使用。Vault 和模板选择器会回退到 `vim.ui.select`；缺少
@@ -296,13 +296,14 @@ Daily Note 的目标为 `dailies_folder/os.date(daily_date_format).md`。文件�
 直接打开，不再读取模板；文件不存在时优先渲染 `daily_template`，没有模板则写入
 `daily_default_content`。缺失或同名歧义的模板会中止创建。
 
-## 图片粘贴
+## 剪贴板文件粘贴
 
-仅 macOS 支持。Finder 复制的图片保留 PNG、JPEG、GIF、WEBP、HEIC、HEIF、
-TIFF、BMP 或 SVG 格式；截图和浏览器图片转换为 PNG/JPG/GIF。图片保存到
-`attachments_folder`，链接使用当前笔记到图片的相对路径。
+仅 macOS 支持。Finder 复制的任意文件会保留原格式并保存到
+`attachments_folder`；图片（PNG、JPEG、GIF、WEBP、HEIC、HEIF、TIFF、BMP 或
+SVG）插入 `![](path)`，其他文件插入 `[文件名](path)`。截图和浏览器图片转换为
+PNG/JPG/GIF。
 
-如果目标名已经被任一支持格式占用，会自动选择 `name-1`、`name-2`。图片先写入
+如果目标名已经被任一支持格式占用，会自动选择 `name-1`、`name-2`。文件先写入
 同目录临时文件，再以排他方式发布，最终目标不会被替换。
 
 ## 回调与事件
