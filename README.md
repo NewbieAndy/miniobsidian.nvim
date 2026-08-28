@@ -6,6 +6,8 @@
 笔记、Wikilink、模板、Daily Note、Checkbox 和图片粘贴。插件不集成外部
 CLI 或 Agent，也不承担多个客户端之间的写入协调。
 
+> **灵感来源：** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) —— 一个功能完整的 Obsidian Neovim 客户端。`miniobsidian.nvim` 采用更轻量的设计哲学：无 Telescope 依赖、无复杂事件系统，只保留每天真正用到的功能。如需功能更全面、久经考验的方案，推荐使用该插件。
+
 ## 功能
 
 - 从 Obsidian 官方配置自动发现多个 Vault，或扫描指定 Vault 父目录
@@ -431,6 +433,12 @@ make ci
 
 完整开发校验还需要 `stylua`、`selene` 和 `plenary.nvim`；可通过 `NVIM` 与
 `PLENARY_DIR` 覆盖 Makefile 中的默认路径。
+
+## 鸣谢
+
+- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) by [@epwalsh](https://github.com/epwalsh) —— 本插件的灵感来源。如需功能完整、久经考验的 Obsidian Neovim 客户端，推荐使用该插件。
+- [snacks.nvim](https://github.com/folke/snacks.nvim) by [@folke](https://github.com/folke) —— 提供 Picker UI 支持。
+- [blink.cmp](https://github.com/Saghen/blink.cmp) by [@Saghen](https://github.com/Saghen) —— 提供自动补全集成能力。
 
 ## License
 

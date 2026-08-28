@@ -7,6 +7,8 @@ note creation and search, Wikilinks, templates, Daily Notes, checkboxes, and ima
 paste. It has no external CLI or Agent integration and does not coordinate writes
 across clients.
 
+> **Inspired by** [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) — a full-featured Obsidian client for Neovim. `miniobsidian.nvim` takes a lighter approach: no Telescope dependency, no heavy event system, just the features you actually use every day. If you need a more complete, battle-tested solution, use that instead.
+
 ## Features
 
 - Discover Vaults from Obsidian configuration or a configured parent directory
@@ -447,6 +449,12 @@ Vault discovery source, and the active Vault.
 
 Full development verification also requires `stylua`, `selene`, and `plenary.nvim`;
 override the Makefile defaults with `NVIM` and `PLENARY_DIR` when needed.
+
+## Acknowledgements
+
+- [obsidian.nvim](https://github.com/epwalsh/obsidian.nvim) by [@epwalsh](https://github.com/epwalsh) — the original inspiration for this plugin. If you need a full-featured, battle-tested Obsidian client for Neovim, use that instead.
+- [snacks.nvim](https://github.com/folke/snacks.nvim) by [@folke](https://github.com/folke) — powers the picker UI.
+- [blink.cmp](https://github.com/Saghen/blink.cmp) by [@Saghen](https://github.com/Saghen) — powers the autocomplete integration.
 
 ## License
 
