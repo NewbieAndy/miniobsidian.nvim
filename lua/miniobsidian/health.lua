@@ -38,15 +38,15 @@ function M.vault_status(core)
 
   if not parent or parent == "" then
     if core.config.auto_discover == false then
-      return { { level = "error", message = "vaults_parent 为空且 auto_discover 已关闭" } }
+      return { { level = "error", message = "vaults_parent is empty and auto_discover is disabled" } }
     end
-    result[#result + 1] = { level = "ok", message = "Vault 来源: Obsidian 自动发现" }
+    result[#result + 1] = { level = "ok", message = "Vault source: Obsidian auto-discovery" }
     if active and active ~= "" and vim.fn.isdirectory(active) == 1 then
-      result[#result + 1] = { level = "ok", message = "active vault_path: " .. active }
+      result[#result + 1] = { level = "ok", message = "Active vault_path: " .. active }
     else
       result[#result + 1] = {
         level = "error",
-        message = "自动发现未得到有效的 active vault_path；请先在 Obsidian 中打开 Vault",
+        message = "Auto-discovery did not yield a valid active vault_path; please open a Vault in Obsidian first",
       }
     end
     return result
@@ -54,7 +54,7 @@ function M.vault_status(core)
 
   parent = vim.fn.expand(parent)
   if vim.fn.isdirectory(parent) ~= 1 then
-    return { { level = "error", message = "vaults_parent 目录不存在: " .. parent } }
+    return { { level = "error", message = "vaults_parent directory does not exist: " .. parent } }
   end
   result[#result + 1] = { level = "ok", message = "vaults_parent: " .. parent }
 
@@ -62,15 +62,15 @@ function M.vault_status(core)
   vault.refresh_vaults()
   local vaults = vault.list_vaults(parent)
   if #vaults == 0 then
-    result[#result + 1] = { level = "error", message = "未找到含 .obsidian/ 的有效 Vault" }
+    result[#result + 1] = { level = "error", message = "No valid Vault containing .obsidian/ found" }
     return result
   end
-  result[#result + 1] = { level = "ok", message = ("vaults found: %d"):format(#vaults) }
+  result[#result + 1] = { level = "ok", message = ("Vaults found: %d"):format(#vaults) }
 
   if active and active ~= "" and vim.fn.isdirectory(active) == 1 then
-    result[#result + 1] = { level = "ok", message = "active vault_path: " .. active }
+    result[#result + 1] = { level = "ok", message = "Active vault_path: " .. active }
   else
-    result[#result + 1] = { level = "warn", message = "active vault_path 无效；setup() 可能未成功" }
+    result[#result + 1] = { level = "warn", message = "Active vault_path is invalid; setup() may have failed" }
   end
   return result
 end

@@ -5,6 +5,37 @@ local fs = require("miniobsidian.fs")
 local path_policy = require("miniobsidian.path")
 local wikilink = require("miniobsidian.wikilink")
 
+---Stable error codes exposed for tests and programmatic handling.
+M.error_codes = {
+  SAVE_BEFORE_MOVE = "SAVE_BEFORE_MOVE",
+  BUFFER_OCCUPIED = "BUFFER_OCCUPIED",
+  BUFFER_OPEN_IN_WINDOW = "BUFFER_OPEN_IN_WINDOW",
+  STALE_BUFFER = "STALE_BUFFER",
+  NOT_A_NOTE_FILE = "NOT_A_NOTE_FILE",
+  NO_ACTIONABLE_NOTE = "NO_ACTIONABLE_NOTE",
+  TARGET_NOT_STRING = "TARGET_NOT_STRING",
+  TARGET_NOT_MD = "TARGET_NOT_MD",
+  ALREADY_AT_TARGET = "ALREADY_AT_TARGET",
+  TARGET_EXISTS = "TARGET_EXISTS",
+  READ_NOTE_FAILED = "READ_NOTE_FAILED",
+  BUFFER_RENAME_FAILED = "BUFFER_RENAME_FAILED",
+  UNSAVED_PEERS = "UNSAVED_PEERS",
+  CREATE_DIRECTORY_FAILED = "CREATE_DIRECTORY_FAILED",
+  MOVE_FAILED = "MOVE_FAILED",
+  RENAME_FAILED = "RENAME_FAILED",
+  UPDATE_REFERENCES_FAILED = "UPDATE_REFERENCES_FAILED",
+  ROLLBACK_INCOMPLETE = "ROLLBACK_INCOMPLETE",
+  RENAME_NOT_STRING = "RENAME_NOT_STRING",
+  RENAME_EMPTY = "RENAME_EMPTY",
+  RENAME_ONLY_FILENAME = "RENAME_ONLY_FILENAME",
+}
+
+local E = M.error_codes
+
+local function coded_error(code, message)
+  return code .. ": " .. message
+end
+
 local function strip_md(value)
   return value:gsub("%.md$", "")
 end
@@ -33,7 +64,7 @@ local function save_source_buffer(source)
             vim.cmd("silent noautocmd write")
           end)
           if not ok then
-            return nil, "无法保存待移动笔记: " .. tostring(err)
+            return nil, coded_error(E.SAVE_BEFORE_MOVE, "Failed to save note before moving: " .. tostring(err))
           end
         end
         return buffer
@@ -51,14 +82,14 @@ local function release_stale_target_buffer(target_buffer, source_buffer)
     return true
   end
   if vim.bo[target_buffer].modified then
-    return nil, "目标路径已被另一个 buffer 占用"
+    return nil, coded_error(E.BUFFER_OCCUPIED, "Failed to move: target path is occupied by another buffer")
   end
   if vim.api.nvim_buf_is_loaded(target_buffer) and #vim.fn.win_findbuf(target_buffer) > 0 then
-    return nil, "目标路径已在另一个窗口中打开"
+    return nil, coded_error(E.BUFFER_OPEN_IN_WINDOW, "Failed to move: target path is open in another window")
   end
   local deleted, delete_err = pcall(vim.api.nvim_buf_delete, target_buffer, { force = false })
   if not deleted then
-    return nil, "无法清理目标路径的陈旧 buffer: " .. tostring(delete_err)
+    return nil, coded_error(E.STALE_BUFFER, "Failed to clean up stale buffer for target path: " .. tostring(delete_err))
   end
   return true
 end
@@ -82,7 +113,7 @@ local function resolve_source(vault, source)
     return nil, err
   end
   if not resolved.logical:match("%.md$") or vim.fn.filereadable(resolved.path) ~= 1 then
-    return nil, "待移动路径不是可读的 Markdown 笔记"
+    return nil, coded_error(E.NOT_A_NOTE_FILE, "Failed to move: selected path is not a readable Markdown note")
   end
   return resolved
 end
@@ -94,13 +125,13 @@ local function source_input(opts)
   local entry = require("miniobsidian.explorer").current_entry()
   if entry then
     if entry.type ~= "file" then
-      return nil, "文件树当前选中项不是笔记文件"
+      return nil, coded_error(E.NOT_A_NOTE_FILE, "Failed to move: file tree selection is not a note file")
     end
     return entry.path
   end
   local current = vim.api.nvim_buf_get_name(0)
   if current == "" then
-    return nil, "当前 buffer 或文件树中没有可操作的笔记"
+    return nil, coded_error(E.NO_ACTIONABLE_NOTE, "Failed to move: no actionable note in current buffer or file tree")
   end
   return current
 end
@@ -114,7 +145,7 @@ end
 
 local function move_prompt(on_confirm)
   local opts = {
-    prompt = "移动到 Vault 相对笔记路径（目录请以 / 结尾）: ",
+    prompt = "Move to Vault-relative note path (end directories with /): ",
     completion = "customlist,v:lua.require'miniobsidian.note_move'.complete_directories",
   }
 
@@ -185,7 +216,7 @@ end
 
 local function resolve_target(vault, source, destination, destination_is_file)
   if type(destination) ~= "string" then
-    return nil, "目标路径必须是字符串"
+    return nil, coded_error(E.TARGET_NOT_STRING, "Failed to move: target path must be a string")
   end
   destination = destination:match("^%s*(.-)%s*$")
   local directory_hint = destination:match("[/\\]$") ~= nil
@@ -206,13 +237,13 @@ local function resolve_target(vault, source, destination, destination_is_file)
     return nil, err
   end
   if not resolved.logical:match("%.md$") then
-    return nil, "目标文件必须使用 .md 扩展名"
+    return nil, coded_error(E.TARGET_NOT_MD, "Failed to move: target file must use the .md extension")
   end
   if path_policy.normalize(resolved.path) == path_policy.normalize(source.path) then
-    return nil, "笔记已经位于目标路径"
+    return nil, coded_error(E.ALREADY_AT_TARGET, "Failed to move: note is already at the target path")
   end
   if resolved.exists and not same_path(resolved.path, source.path) then
-    return nil, "目标笔记已存在: " .. resolved.logical
+    return nil, coded_error(E.TARGET_EXISTS, "Failed to move: target note already exists: " .. resolved.logical)
   end
   return resolved
 end
@@ -464,7 +495,7 @@ local function build_updates(notes, vault, source, target)
   for _, note_path in ipairs(notes) do
     local content, read_err = fs.read(note_path)
     if not content then
-      return nil, "无法读取笔记 " .. note_path .. ": " .. tostring(read_err)
+      return nil, coded_error(E.READ_NOTE_FAILED, "Failed to read note " .. note_path .. ": " .. tostring(read_err))
     end
     local rewritten, link_count = rewrite_wikilinks(content, notes, vault, old_id, new_id, short_unique)
     local identity_count = 0
@@ -505,10 +536,7 @@ local function refresh_buffers(source_buffer, source, target, updates)
   if source_buffer and vim.api.nvim_buf_is_valid(source_buffer) then
     local ok, err = pcall(vim.api.nvim_buf_set_name, source_buffer, target.path)
     if not ok then
-      require("miniobsidian").notify(
-        "笔记已移动，但 buffer 路径更新失败: " .. tostring(err),
-        vim.log.levels.WARN
-      )
+      require("miniobsidian").notify("Failed to update buffer path after move: " .. tostring(err), vim.log.levels.WARN)
     end
   end
 
@@ -595,7 +623,7 @@ local function perform(destination, opts)
   opts = opts or {}
   local core = require("miniobsidian")
   local operation = opts.operation == "rename" and "rename" or "move"
-  local action = operation == "rename" and "重命名" or "移动"
+  local action = operation == "rename" and "rename" or "move"
   local vault = core.config.vault_path
   local selected, selection_err = source_input(opts)
   if not selected then
@@ -612,7 +640,8 @@ local function perform(destination, opts)
   end
   local modified = modified_vault_buffer(vault, source.path)
   if modified then
-    return nil, "存在未保存的 Vault 笔记，无法安全更新引用: " .. modified
+    return nil,
+      coded_error(E.UNSAVED_PEERS, "Failed to move: unsaved Vault notes would break reference updates: " .. modified)
   end
 
   local target, target_err = resolve_target(vault, source, destination, opts.destination_is_file)
@@ -633,11 +662,12 @@ local function perform(destination, opts)
 
   local parent = dirname(target.path)
   if vim.fn.mkdir(parent, "p") == 0 and vim.fn.isdirectory(parent) == 0 then
-    return nil, "无法创建目标目录: " .. parent
+    return nil, coded_error(E.CREATE_DIRECTORY_FAILED, "Failed to create target directory: " .. parent)
   end
   local moved, move_err = uv.fs_rename(source.path, target.path)
   if not moved then
-    return nil, action .. "笔记失败: " .. tostring(move_err)
+    local code = operation == "rename" and E.RENAME_FAILED or E.MOVE_FAILED
+    return nil, coded_error(code, "Failed to " .. action .. " note: " .. tostring(move_err))
   end
 
   local written = {}
@@ -645,9 +675,12 @@ local function perform(destination, opts)
     local ok, write_err = fs.write_atomic(update.path, update.after)
     if not ok then
       local rollback_ok, rollback_err = rollback(source, target, written)
-      local message = "更新引用失败，" .. action .. "已回滚: " .. tostring(write_err)
+      local message = coded_error(
+        E.UPDATE_REFERENCES_FAILED,
+        "Failed to update references; " .. action .. " rolled back: " .. tostring(write_err)
+      )
       if not rollback_ok then
-        message = message .. "；回滚不完整: " .. rollback_err
+        message = message .. "; rollback incomplete: " .. rollback_err
       end
       return nil, message
     end
@@ -709,9 +742,9 @@ function M.move(destination, opts)
   if opts.notify ~= false then
     core.notify(
       string.format(
-        "笔记已移动，更新 %d 个文件中的 %d 处引用，同步 %d 处标题",
-        result.updated_files,
+        "Note moved; updated %d references across %d files and synced %d titles",
         result.updated_links,
+        result.updated_files,
         result.updated_identity_fields
       )
     )
@@ -721,14 +754,18 @@ end
 
 local function rename_target(name, opts)
   if type(name) ~= "string" then
-    return nil, "新文件名必须是字符串"
+    return nil, coded_error(E.RENAME_NOT_STRING, "Failed to rename: new filename must be a string")
   end
   name = name:match("^%s*(.-)%s*$")
   if name == "" then
-    return nil, "新文件名不能为空"
+    return nil, coded_error(E.RENAME_EMPTY, "Failed to rename: new filename cannot be empty")
   end
   if name:find("/", 1, true) or name:find("\\", 1, true) then
-    return nil, "重命名只接受文件名；移动目录请使用 ObsidianMove"
+    return nil,
+      coded_error(
+        E.RENAME_ONLY_FILENAME,
+        "Failed to rename: rename accepts only a filename; use ObsidianMove for directories"
+      )
   end
 
   local core = require("miniobsidian")
@@ -763,7 +800,7 @@ function M.rename(name, opts)
     local source = resolve_source(core.config.vault_path, selected)
     local default = source and strip_md(assert(basename(source.logical))) or ""
     local prompt_opts = vim.tbl_extend("force", opts, { source = selected })
-    vim.ui.input({ prompt = "重命名笔记: ", default = default }, function(choice)
+    vim.ui.input({ prompt = "Rename note: ", default = default }, function(choice)
       if choice == nil or choice == "" then
         return
       end
@@ -792,9 +829,9 @@ function M.rename(name, opts)
   if opts.notify ~= false then
     core.notify(
       string.format(
-        "笔记已重命名，更新 %d 个文件中的 %d 处引用，同步 %d 处标题",
-        result.updated_files,
+        "Note renamed; updated %d references across %d files and synced %d titles",
         result.updated_links,
+        result.updated_files,
         result.updated_identity_fields
       )
     )

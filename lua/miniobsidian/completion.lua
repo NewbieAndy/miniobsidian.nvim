@@ -246,13 +246,13 @@ function M:get_completions(ctx, callback)
     if cb then
       -- 状态描述表（Obsidian / GitHub 风格），未知状态回退到通用描述
       local state_labels = {
-        [" "] = "待办",
-        ["/"] = "进行中",
-        ["x"] = "已完成",
-        ["-"] = "已取消",
-        [">"] = "已转移",
-        ["!"] = "重要",
-        ["?"] = "疑问",
+        [" "] = "To do",
+        ["/"] = "In progress",
+        ["x"] = "Done",
+        ["-"] = "Cancelled",
+        [">"] = "Forwarded",
+        ["!"] = "Important",
+        ["?"] = "Question",
       }
 
       local core = require("miniobsidian")
@@ -264,7 +264,7 @@ function M:get_completions(ctx, callback)
         table.insert(items, {
           label = new_text,
           kind = ItemKind.Text,
-          detail = state_labels[state] or ("状态: " .. state),
+          detail = state_labels[state] or ("State: " .. state),
           sortText = string.format("%02d", i), -- 两位数字串保证字典序 = 用户配置顺序
           filterText = new_text,
           insertTextFormat = PlainText,

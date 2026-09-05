@@ -96,7 +96,7 @@ function M._parse_obsidian_json(path)
 
   local ok, parsed = pcall(vim.json.decode, table.concat(content, "\n"))
   if not ok or type(parsed) ~= "table" or type(parsed.vaults) ~= "table" then
-    vim.notify("[miniobsidian] 无法解析 Obsidian 配置文件: " .. path, vim.log.levels.WARN)
+    vim.notify("[miniobsidian] Failed to parse Obsidian configuration file: " .. path, vim.log.levels.WARN)
     return {}
   end
 

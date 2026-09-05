@@ -96,10 +96,10 @@ function M.collect(target_path)
   local core = require("miniobsidian")
   target_path = target_path or vim.api.nvim_buf_get_name(0)
   if target_path == "" or target_path:lower():sub(-3) ~= ".md" then
-    return nil, "当前 buffer 不是 Markdown 笔记"
+    return nil, "Current buffer is not a Markdown note"
   end
   if not core.in_vault(target_path) then
-    return nil, "当前笔记不在活跃 Vault 内"
+    return nil, "Current note is not in the active vault"
   end
 
   -- 反向链接本身需要扫描所有文件，因此同时强制刷新路径列表，避免遗漏外部新建笔记。
@@ -112,7 +112,7 @@ function M.collect(target_path)
     end
   end
   if not target then
-    return nil, "当前笔记尚未保存或不存在"
+    return nil, "Current note is not saved or does not exist"
   end
 
   local resolved_target, resolve_err = path_policy.resolve(core.config.vault_path, target, { allow_absolute = true })
@@ -140,7 +140,7 @@ function M.collect(target_path)
   for _, note_path in ipairs(notes) do
     local lines, read_err = note_lines(note_path)
     if not lines then
-      return nil, "无法读取笔记 " .. note_path .. ": " .. tostring(read_err)
+      return nil, "Failed to read note " .. note_path .. ": " .. tostring(read_err)
     end
     scan_lines(lines, function(inner, line_number, column, line)
       local parsed = wikilink.parse(inner)
@@ -176,13 +176,13 @@ function M.open(target_path)
     return
   end
   if #items == 0 then
-    core.notify("当前笔记没有反向链接", vim.log.levels.INFO)
+    core.notify("No backlinks for the current note", vim.log.levels.INFO)
     return
   end
 
   local ok, snacks = pcall(require, "snacks")
   if not ok or not snacks.picker or not snacks.picker.pick then
-    core.notify("查看反向链接需要 snacks.nvim 插件", vim.log.levels.ERROR)
+    core.notify("Viewing backlinks requires the snacks.nvim plugin", vim.log.levels.ERROR)
     return
   end
 

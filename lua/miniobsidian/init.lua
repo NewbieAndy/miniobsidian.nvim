@@ -132,7 +132,7 @@ function M.apply_vault_config(vault_path)
   if candidate.sync_obsidian_config then
     local ok, config_sync = pcall(require, "miniobsidian.config_sync")
     if not ok then
-      return false, { "无法加载 Obsidian 配置同步模块: " .. tostring(config_sync) }
+      return false, { "Failed to load Obsidian config sync module: " .. tostring(config_sync) }
     end
     for key, value in pairs(config_sync.read_vault_config(vault_path)) do
       if not M._user_config_keys or not M._user_config_keys[key] then
@@ -160,21 +160,24 @@ function M.validate_config(config)
     end
   end
 
-  add(type(config.vaults_parent) == "string", "vaults_parent 必须是字符串")
-  add(type(config.default_vault) == "string", "default_vault 必须是字符串")
-  add(type(config.auto_discover) == "boolean", "auto_discover 必须是 boolean")
-  add(type(config.sync_obsidian_config) == "boolean", "sync_obsidian_config 必须是 boolean")
-  add(type(config.change_cwd_on_switch) == "boolean", "change_cwd_on_switch 必须是 boolean")
-  add(config.picker_scope == "notes" or config.picker_scope == "vault", "picker_scope 必须是 notes 或 vault")
-  add(type(config.daily_date_format) == "string" and config.daily_date_format ~= "", "daily_date_format 不能为空")
-  add(type(config.note_id_func) == "function", "note_id_func 必须是函数")
-  add(type(config.checkbox_states) == "table" and #config.checkbox_states > 0, "checkbox_states 不能为空")
+  add(type(config.vaults_parent) == "string", "vaults_parent must be a string")
+  add(type(config.default_vault) == "string", "default_vault must be a string")
+  add(type(config.auto_discover) == "boolean", "auto_discover must be a boolean")
+  add(type(config.sync_obsidian_config) == "boolean", "sync_obsidian_config must be a boolean")
+  add(type(config.change_cwd_on_switch) == "boolean", "change_cwd_on_switch must be a boolean")
+  add(config.picker_scope == "notes" or config.picker_scope == "vault", "picker_scope must be 'notes' or 'vault'")
+  add(
+    type(config.daily_date_format) == "string" and config.daily_date_format ~= "",
+    "daily_date_format cannot be empty"
+  )
+  add(type(config.note_id_func) == "function", "note_id_func must be a function")
+  add(type(config.checkbox_states) == "table" and #config.checkbox_states > 0, "checkbox_states cannot be empty")
 
   local path_policy = require("miniobsidian.path")
   for _, key in ipairs({ "notes_subdir", "dailies_folder", "templates_folder", "attachments_folder" }) do
     local value = config[key]
     local valid = type(value) == "string" and path_policy.validate_logical(value, { allow_empty = true })
-    add(valid ~= nil and valid ~= false, key .. " 必须是安全的 Vault 相对路径")
+    add(valid ~= nil and valid ~= false, key .. " must be a safe Vault-relative path")
   end
 
   return errors
@@ -226,7 +229,7 @@ function M.get_all_notes(force)
 
   -- 检查 vault 目录是否存在，isdirectory 返回 0 表示不存在或是文件
   if vim.fn.isdirectory(vault) == 0 then
-    vim.notify("[miniobsidian] vault_path 不存在: " .. vault, vim.log.levels.WARN)
+    vim.notify("[miniobsidian] vault_path does not exist: " .. vault, vim.log.levels.WARN)
     return {}
   end
 
@@ -365,7 +368,7 @@ function M.run_callback(name, callback, ...)
   end
   local ok, result = pcall(callback, ...)
   if not ok then
-    M.notify(name .. " 回调执行失败: " .. tostring(result), vim.log.levels.WARN)
+    M.notify(name .. " callback execution failed: " .. tostring(result), vim.log.levels.WARN)
   end
   return ok, result
 end
@@ -422,7 +425,7 @@ function M.setup(opts)
   local config_errors = M.validate_config(M.config)
   if #config_errors > 0 then
     for _, message in ipairs(config_errors) do
-      M.notify("配置无效: " .. message, vim.log.levels.ERROR)
+      M.notify("Invalid configuration: " .. message, vim.log.levels.ERROR)
     end
     return false, config_errors
   end
@@ -436,11 +439,11 @@ function M.setup(opts)
   local vaults = vault.list_vaults(M.config.vaults_parent)
 
   if #vaults == 0 then
-    local errors = { "未找到有效的 vault" }
+    local errors = { "No valid vault found" }
     vim.notify(
-      "[miniobsidian] 未找到有效的 vault。解决方法：\n"
-        .. "  1. 在 Obsidian 客户端中新建或打开一个 vault\n"
-        .. "  2. 手动配置 vaults_parent 指向 vault 的父目录",
+      "[miniobsidian] No valid vault found. Solutions:\n"
+        .. "  1. Create or open a vault in the Obsidian client\n"
+        .. "  2. Manually configure vaults_parent to point to the parent directory of a vault",
       vim.log.levels.ERROR
     )
     return false, errors
@@ -462,7 +465,7 @@ function M.setup(opts)
         vim.notify(
           "[miniobsidian] default_vault '"
             .. M.config.default_vault
-            .. "' 未找到，使用第一个 vault："
+            .. "' not found, using the first vault: "
             .. target.name,
           vim.log.levels.WARN
         )
@@ -472,7 +475,7 @@ function M.setup(opts)
     local applied, apply_errors = M.apply_vault_config(target.path)
     if not applied then
       for _, message in ipairs(apply_errors) do
-        M.notify("Vault 配置无效: " .. message, vim.log.levels.ERROR)
+        M.notify("Invalid Vault configuration: " .. message, vim.log.levels.ERROR)
       end
       return false, apply_errors
     end

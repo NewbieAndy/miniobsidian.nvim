@@ -123,7 +123,7 @@ describe("miniobsidian init", function()
     vim.notify = previous_notify
     assert.is_false(ok)
     assert.equals(vim.log.levels.WARN, notifications[1].level)
-    assert.truthy(notifications[1].message:find("after_note_open 回调执行失败", 1, true))
+    assert.truthy(notifications[1].message:find("after_note_open callback execution failed", 1, true))
     assert.truthy(notifications[1].message:find("callback exploded", 1, true))
   end)
 end)

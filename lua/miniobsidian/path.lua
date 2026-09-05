@@ -45,21 +45,21 @@ end
 
 local function validate_segment(segment)
   if segment == "" or segment == "." or segment == ".." then
-    return fail("路径包含空、当前目录或父目录段")
+    return fail("Path contains empty, current, or parent directory segment")
   end
   if segment:sub(1, 1) == "." then
-    return fail("普通内容路径不能包含隐藏目录")
+    return fail("Content path cannot contain hidden directories")
   end
   if segment:find(":", 1, true) then
-    return fail("路径不能包含 Windows ADS 分隔符")
+    return fail("Path cannot contain Windows ADS separator")
   end
   if segment:match("[%. ]$") then
-    return fail("路径段不能以点或空格结尾")
+    return fail("Path segment cannot end with a dot or space")
   end
 
   local device = segment:match("^([^%.]+)")
   if device and windows_devices[device:upper()] then
-    return fail("路径包含 Windows 保留设备名")
+    return fail("Path contains a Windows reserved device name")
   end
   return true
 end
@@ -172,15 +172,15 @@ function M.validate_logical(logical, opts)
     if opts.allow_empty then
       return ""
     end
-    return fail("路径不能为空")
+    return fail("Path cannot be empty")
   end
   if logical:find("%z") then
-    return fail("路径不能包含 NUL")
+    return fail("Path cannot contain NUL")
   end
 
   local normalized = logical:gsub("\\", "/")
   if normalized:sub(1, 1) == "~" or is_absolute(normalized) or normalized:match("^%a:") then
-    return fail("内容路径必须是 Vault 相对路径")
+    return fail("Content path must be Vault-relative")
   end
 
   for _, segment in ipairs(vim.split(normalized, "/", { plain = true })) do
@@ -201,7 +201,7 @@ function M.resolve(vault, input, opts)
   opts = opts or {}
   local root = M.realpath(vault)
   if not root then
-    return fail("Vault 根目录不存在或无法解析")
+    return fail("Vault root directory does not exist or cannot be resolved")
   end
 
   local candidate
@@ -210,11 +210,11 @@ function M.resolve(vault, input, opts)
   if opts.allow_absolute and is_absolute(normalized_input) then
     candidate = resolve_nearest(normalized_input)
     if not candidate then
-      return fail("绝对路径无法解析")
+      return fail("Absolute path cannot be resolved")
     end
     logical = M.relative(root, candidate)
     if not logical or logical == ".." or logical:sub(1, 3) == "../" then
-      return fail("绝对路径不在当前 Vault 内")
+      return fail("Absolute path is outside the current Vault")
     end
     local valid, err = M.validate_logical(logical, { allow_empty = opts.allow_empty })
     if not valid then
@@ -232,7 +232,7 @@ function M.resolve(vault, input, opts)
 
   local resolved = resolve_nearest(candidate)
   if not resolved or not M.is_within_vault(root, candidate) then
-    return fail("路径经符号链接解析后逃逸 Vault")
+    return fail("Path escapes the Vault after symlink resolution")
   end
   return {
     path = candidate,

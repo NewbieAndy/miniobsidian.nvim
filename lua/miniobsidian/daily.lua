@@ -36,7 +36,7 @@ function M.resolve_today(opts)
   local logical = cfg.dailies_folder == "" and (date_str .. ".md") or (cfg.dailies_folder .. "/" .. date_str .. ".md")
   local resolved, resolve_err = path_policy.resolve(cfg.vault_path, logical)
   if not resolved then
-    return nil, "Daily Note 路径不安全: " .. tostring(resolve_err)
+    return nil, "Daily note path is unsafe: " .. tostring(resolve_err)
   end
   if vim.fn.filereadable(resolved.path) == 1 then
     return {
@@ -53,11 +53,11 @@ function M.resolve_today(opts)
   if cfg.daily_template and cfg.daily_template ~= "" then
     local template_path, template_err = resolve_template(core, cfg.daily_template)
     if not template_path then
-      return nil, "Daily Note 模板无法解析: " .. tostring(template_err)
+      return nil, "Daily note template cannot be resolved: " .. tostring(template_err)
     end
     source, template_err = require("miniobsidian.fs").read(template_path)
     if not source then
-      return nil, "Daily Note 模板无法读取: " .. tostring(template_err)
+      return nil, "Daily note template cannot be read: " .. tostring(template_err)
     end
   end
 
@@ -67,7 +67,7 @@ function M.resolve_today(opts)
     date_format = cfg.daily_date_format,
   })
   if not content then
-    return nil, "Daily Note 模板渲染失败: " .. tostring(render_err)
+    return nil, "Daily note template render failed: " .. tostring(render_err)
   end
   return {
     path = resolved.path,
@@ -93,7 +93,7 @@ function M.open_today(opts)
   vim.fn.mkdir(vim.fn.fnamemodify(plan.path, ":h"), "p")
   local is_new, create_err = require("miniobsidian.fs").create_exclusive(plan.path, plan.content)
   if is_new == nil then
-    core.notify("创建每日笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
+    core.notify("Failed to create daily note: " .. tostring(create_err), vim.log.levels.ERROR)
     return
   end
   if is_new then

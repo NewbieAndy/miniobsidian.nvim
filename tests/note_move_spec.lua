@@ -329,12 +329,12 @@ describe("note move", function()
       source = source,
       notify = false,
     })
-    assert.truthy(path_err:find("只接受文件名", 1, true))
+    assert.truthy(path_err:find("RENAME_ONLY_FILENAME", 1, true))
     local _, exists_err = require("miniobsidian.note").rename("Occupied", {
       source = source,
       notify = false,
     })
-    assert.truthy(exists_err:find("目标笔记已存在", 1, true))
+    assert.truthy(exists_err:find("TARGET_EXISTS", 1, true))
     assert.equals(1, vim.fn.filereadable(source))
   end)
 
@@ -413,7 +413,7 @@ describe("note move", function()
     local result, err = require("miniobsidian.note").rename("Nope", { notify = false })
 
     assert.is_nil(result)
-    assert.truthy(err:find("不是笔记文件", 1, true))
+    assert.truthy(err:find("NOT_A_NOTE_FILE", 1, true))
   end)
 
   it("rejects unsafe destinations, existing targets, and modified peer buffers", function()
@@ -426,7 +426,7 @@ describe("note move", function()
     local _, unsafe_err = require("miniobsidian.note").move("../Outside", { source = source, notify = false })
     assert.truthy(unsafe_err:find("PATH_OUTSIDE_VAULT", 1, true))
     local _, exists_err = require("miniobsidian.note").move("Archive", { source = source, notify = false })
-    assert.truthy(exists_err:find("目标笔记已存在", 1, true))
+    assert.truthy(exists_err:find("TARGET_EXISTS", 1, true))
 
     local peer = vault .. "/Notes/Peer.md"
     vim.fn.writefile({ "peer" }, peer)
@@ -436,7 +436,7 @@ describe("note move", function()
       source = source,
       notify = false,
     })
-    assert.truthy(modified_err:find("存在未保存", 1, true))
+    assert.truthy(modified_err:find("UNSAVED_PEERS", 1, true))
     assert.equals(1, vim.fn.filereadable(source))
   end)
 
@@ -461,7 +461,7 @@ describe("note move", function()
     fs.write_atomic = original_write
 
     assert.is_nil(result)
-    assert.truthy(err:find("移动已回滚", 1, true))
+    assert.truthy(err:find("UPDATE_REFERENCES_FAILED", 1, true))
     assert.equals(1, vim.fn.filereadable(source))
     assert.equals(0, vim.fn.filereadable(vault .. "/Archive/Source.md"))
     assert.same({ "[[Notes/Source]]" }, vim.fn.readfile(reference))

@@ -48,7 +48,7 @@ function M.list_vaults(parent)
   if not parent or parent == "" then
     local ok_core, core = pcall(require, "miniobsidian")
     if ok_core and core.config and core.config.auto_discover == false then
-      vim.notify("[miniobsidian] vaults_parent 未设置且 auto_discover 已关闭", vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] vaults_parent is not set and auto_discover is disabled", vim.log.levels.ERROR)
       return {}
     end
 
@@ -67,12 +67,12 @@ function M.list_vaults(parent)
         return vaults
       end
     end
-    vim.notify("[miniobsidian] vaults_parent 未设置且自动发现未找到 vault", vim.log.levels.ERROR)
+    vim.notify("[miniobsidian] vaults_parent is not set and auto-discover found no vault", vim.log.levels.ERROR)
     return {}
   end
 
   if vim.fn.isdirectory(parent) == 0 then
-    vim.notify("[miniobsidian] vaults_parent 目录不存在: " .. parent, vim.log.levels.ERROR)
+    vim.notify("[miniobsidian] vaults_parent directory does not exist: " .. parent, vim.log.levels.ERROR)
     return {}
   end
 
@@ -109,13 +109,13 @@ function M.do_switch(entry)
   local core = require("miniobsidian")
   local real = path_policy.realpath(entry.path)
   if not real or vim.fn.isdirectory(path_policy.join(real, ".obsidian")) == 0 then
-    vim.notify("[miniobsidian] 无法切换到无效 Vault: " .. tostring(entry.path), vim.log.levels.ERROR)
+    vim.notify("[miniobsidian] Failed to switch to invalid vault: " .. tostring(entry.path), vim.log.levels.ERROR)
     return
   end
   local applied, errors = core.apply_vault_config(real)
   if not applied then
     for _, message in ipairs(errors) do
-      core.notify("Vault 配置无效: " .. message, vim.log.levels.ERROR)
+      core.notify("Invalid Vault configuration: " .. message, vim.log.levels.ERROR)
     end
     return
   end
@@ -126,7 +126,7 @@ function M.do_switch(entry)
   if core.config.change_cwd_on_switch then
     local ok, err = pcall(vim.cmd, "tcd " .. vim.fn.fnameescape(real))
     if not ok then
-      vim.notify("[miniobsidian] 切换 tab-local 工作目录失败: " .. tostring(err), vim.log.levels.WARN)
+      vim.notify("[miniobsidian] Failed to switch tab-local working directory: " .. tostring(err), vim.log.levels.WARN)
     end
   end
 
@@ -140,7 +140,7 @@ function M.do_switch(entry)
   -- 调用用户配置的 on_vault_switch 回调（如果存在）
   core.run_callback("on_vault_switch", core.config.on_vault_switch, entry.name, real)
 
-  vim.notify("[miniobsidian] 已切换到 vault：" .. entry.name, vim.log.levels.INFO)
+  vim.notify("[miniobsidian] Switched to vault: " .. entry.name, vim.log.levels.INFO)
 end
 
 --- 弹出选择 UI，让用户选择并切换到目标 vault。
@@ -153,7 +153,7 @@ function M.pick_and_switch()
 
   if #vaults == 0 then
     vim.notify(
-      "[miniobsidian] 未找到可用的 vault（vaults_parent 下无含 .obsidian/ 的子目录）",
+      "[miniobsidian] No usable vault found (no .obsidian/ subdirectories under vaults_parent)",
       vim.log.levels.WARN
     )
     return
@@ -180,7 +180,7 @@ function M.pick_and_switch()
     select_fn = vim.ui.select
   end
 
-  select_fn(labels, { prompt = "切换 Vault" }, function(choice)
+  select_fn(labels, { prompt = "Switch Vault" }, function(choice)
     if not choice then
       return
     end

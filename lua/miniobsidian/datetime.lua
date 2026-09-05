@@ -1,5 +1,9 @@
 local M = {}
 
+local function fail(code, message)
+  return nil, code .. ": " .. message
+end
+
 local TOKENS = {
   { "YYYY", "%Y" },
   { "MMMM", "%B" },
@@ -23,7 +27,7 @@ local TOKENS = {
 ---@return string|nil
 function M.moment_to_lua(format)
   if type(format) ~= "string" or format == "" then
-    return nil, "日期格式不能为空"
+    return fail("EMPTY_DATE_FORMAT", "Failed to parse date format: input is empty")
   end
 
   local output = {}
@@ -33,7 +37,7 @@ function M.moment_to_lua(format)
     if char == "[" then
       local closing = format:find("]", index + 1, true)
       if not closing then
-        return nil, "日期格式包含未闭合的字面量"
+        return fail("UNCLOSED_LITERAL", "Failed to parse date format: contains an unclosed literal")
       end
       output[#output + 1] = format:sub(index + 1, closing - 1):gsub("%%", "%%%%")
       index = closing + 1
@@ -49,7 +53,10 @@ function M.moment_to_lua(format)
       end
       if not matched then
         local unsupported = format:sub(index):match("^%a+") or char
-        return nil, "不支持的 Moment 日期 token: " .. unsupported
+        return fail(
+          "UNSUPPORTED_MOMENT_TOKEN",
+          "Failed to parse date format: unsupported Moment token: " .. unsupported
+        )
       end
     else
       output[#output + 1] = char == "%" and "%%" or char
@@ -115,7 +122,7 @@ function M.render(content, context)
     local original = "{{" .. expression .. "}}"
     if not warned[original] then
       warned[original] = true
-      warnings[#warnings + 1] = "保留未知模板变量 " .. original
+      warnings[#warnings + 1] = "Preserved unknown template variable " .. original
     end
     return original
   end)

@@ -53,7 +53,7 @@ function M.new_note(title, opts)
     M.create(title, nil, opts)
     return
   end
-  vim.ui.input({ prompt = "新笔记标题: " }, function(input)
+  vim.ui.input({ prompt = "New note title: " }, function(input)
     if input and input ~= "" then
       M.create(input, nil, opts)
     end
@@ -67,10 +67,10 @@ function M.new_note_in_dir(dir)
   local core = require("miniobsidian")
   dir = dir:gsub("/+$", "")
   if not core.in_vault(dir) then
-    core.notify("目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
+    core.notify("Target directory is not inside the current vault: " .. dir, vim.log.levels.WARN)
     return
   end
-  vim.ui.input({ prompt = "新笔记标题: " }, function(input)
+  vim.ui.input({ prompt = "New note title: " }, function(input)
     if input and input ~= "" then
       M.create(input, dir)
     end
@@ -85,20 +85,20 @@ function M.new_note_here()
   if dir then
     dir = dir:gsub("/+$", "")
     if not core.in_vault(dir) then
-      core.notify("目标目录不在当前 vault 内: " .. dir, vim.log.levels.WARN)
+      core.notify("Target directory is not inside the current vault: " .. dir, vim.log.levels.WARN)
       return
     end
   else
     local resolved, err = path_policy.resolve(core.config.vault_path, core.config.notes_subdir, { allow_empty = true })
     if not resolved then
-      core.notify("默认笔记目录不安全: " .. tostring(err), vim.log.levels.ERROR)
+      core.notify("Default notes directory is unsafe: " .. tostring(err), vim.log.levels.ERROR)
       return
     end
     dir = resolved.path
-    core.notify("未检测到文件树焦点，将创建到默认目录: " .. core.config.notes_subdir)
+    core.notify("No file tree focus detected; creating in default directory: " .. core.config.notes_subdir)
   end
 
-  vim.ui.input({ prompt = "新笔记标题: " }, function(input)
+  vim.ui.input({ prompt = "New note title: " }, function(input)
     if input and input ~= "" then
       M.create(input, dir)
     end
@@ -115,7 +115,7 @@ function M.create(title, dir, opts)
   opts = opts or {}
   local path, path_err = note_path(title, dir, opts.note_id)
   if not path then
-    require("miniobsidian").notify("笔记路径不安全: " .. tostring(path_err), vim.log.levels.ERROR)
+    require("miniobsidian").notify("Note path is unsafe: " .. tostring(path_err), vim.log.levels.ERROR)
     return
   end
 
@@ -135,7 +135,7 @@ function M.create(title, dir, opts)
   -- 使用排他创建，避免覆盖已有笔记
   local is_new, create_err = require("miniobsidian.fs").create_exclusive(path, frontmatter)
   if is_new == nil then
-    core.notify("创建笔记失败: " .. tostring(create_err), vim.log.levels.ERROR)
+    core.notify("Failed to create note: " .. tostring(create_err), vim.log.levels.ERROR)
     return
   end
   if is_new then

@@ -69,7 +69,7 @@ describe("template", function()
   it("rejects unsupported Moment tokens", function()
     local content, _, err = require("miniobsidian.template").render("{{date:YYYY-[Q]Qo}}", { title = "Daily" })
     assert.is_nil(content)
-    assert.truthy(err:find("不支持", 1, true))
+    assert.truthy(err:find("UNSUPPORTED_MOMENT_TOKEN", 1, true))
   end)
 
   it("shifts calendar dates across a DST boundary instead of adding 86400 seconds", function()

@@ -160,14 +160,14 @@ end
 function M.paste_file(name)
   -- 非 macOS 系统：功能不可用，友好提示后静默返回
   if not IS_MACOS then
-    vim.notify("[miniobsidian] 粘贴附件功能仅支持 macOS", vim.log.levels.WARN)
+    vim.notify("[miniobsidian] Pasting attachments is only supported on macOS", vim.log.levels.WARN)
     return
   end
 
   -- 防御性检查：脚本文件是否存在（安装损坏时的兜底）
   if vim.fn.filereadable(PASTE_SCRIPT) == 0 then
     vim.notify(
-      "[miniobsidian] 内部错误：找不到 paste_file.js，请重新安装插件\n路径: " .. PASTE_SCRIPT,
+      "[miniobsidian] Internal error: paste_file.js not found, please reinstall the plugin\nPath: " .. PASTE_SCRIPT,
       vim.log.levels.ERROR
     )
     return
@@ -181,7 +181,7 @@ function M.paste_file(name)
     -- 解析附件目录（允许 attachments_folder 为空，即直接放在 vault 根目录）
     local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.attachments_folder, { allow_empty = true })
     if not directory then
-      vim.notify("[miniobsidian] 附件目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Attachment directory is unsafe: " .. tostring(directory_err), vim.log.levels.ERROR)
       return
     end
     local attach_dir = directory.path
@@ -202,22 +202,22 @@ function M.paste_file(name)
       -- 解析 stderr 中的错误关键字，给出可读提示
       local err = proc.stderr or ""
       if err:find("NO_CONTENT") then
-        vim.notify("[miniobsidian] 剪贴板中没有文件或图片（或格式不支持）", vim.log.levels.WARN)
+        vim.notify("[miniobsidian] Clipboard contains no files or images (or unsupported format)", vim.log.levels.WARN)
       elseif err:find("READ_FAILED") then
-        vim.notify("[miniobsidian] 读取源文件失败，请检查文件权限", vim.log.levels.ERROR)
+        vim.notify("[miniobsidian] Failed to read source file, please check file permissions", vim.log.levels.ERROR)
       elseif err:find("WRITE_FAILED") then
         vim.notify(
-          "[miniobsidian] 写入临时文件失败，请检查目录权限: " .. attach_dir,
+          "[miniobsidian] Failed to write temporary file, please check directory permissions: " .. attach_dir,
           vim.log.levels.ERROR
         )
       elseif err:find("TIFF_FAILED") or err:find("BITMAP_FAILED") or err:find("CONVERT_FAILED") then
         vim.notify(
-          "[miniobsidian] 图片格式转换失败，剪贴板内容可能不是标准图片",
+          "[miniobsidian] Image format conversion failed; clipboard content may not be a standard image",
           vim.log.levels.ERROR
         )
       else
-        local first_line = err:match("[^\n]+") or "未知错误"
-        vim.notify("[miniobsidian] 附件保存失败: " .. first_line, vim.log.levels.ERROR)
+        local first_line = err:match("[^\n]+") or "Unknown error"
+        vim.notify("[miniobsidian] Failed to save attachment: " .. first_line, vim.log.levels.ERROR)
       end
       return
     end
@@ -226,7 +226,7 @@ function M.paste_file(name)
     local decode_ok, items = pcall(vim.json.decode, proc.stdout or "")
     if not decode_ok or type(items) ~= "table" or #items == 0 then
       vim.fn.delete(temp_dir, "rf")
-      vim.notify("[miniobsidian] 无法解析剪贴板返回数据", vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Failed to parse clipboard response data", vim.log.levels.ERROR)
       return
     end
 
@@ -261,9 +261,9 @@ function M.paste_file(name)
       fs.unlink(temp_path)
 
       if published == false then
-        vim.notify("[miniobsidian] 附件目标已存在，请重试: " .. abs_path, vim.log.levels.WARN)
+        vim.notify("[miniobsidian] Attachment target already exists, please retry: " .. abs_path, vim.log.levels.WARN)
       elseif published == nil then
-        vim.notify("[miniobsidian] 附件发布失败: " .. tostring(publish_err), vim.log.levels.ERROR)
+        vim.notify("[miniobsidian] Failed to finalize attachment: " .. tostring(publish_err), vim.log.levels.ERROR)
       else
         table.insert(saved_files, abs_path)
 
@@ -299,9 +299,11 @@ function M.paste_file(name)
     end
 
     if #saved_files > 0 then
-      local msg = "[miniobsidian] 已保存 " .. #saved_files .. " 个附件"
+      local msg
       if #saved_files == 1 then
-        msg = "[miniobsidian] 附件已保存: " .. saved_files[1]
+        msg = "[miniobsidian] Attachment saved: " .. saved_files[1]
+      else
+        msg = "[miniobsidian] Saved " .. #saved_files .. " attachments"
       end
       vim.notify(msg, vim.log.levels.INFO)
     end
@@ -312,7 +314,7 @@ function M.paste_file(name)
     do_paste(name)
   else
     vim.ui.input({
-      prompt = "附件文件名（不含扩展名）: ",
+      prompt = "Attachment file name (without extension): ",
       default = os.date("attachment-%Y%m%d-%H%M%S"),
     }, function(input)
       if input ~= nil then

@@ -48,7 +48,7 @@ function M.new_template(name)
   local cfg = require("miniobsidian").config
   local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.templates_folder, { allow_empty = true })
   if not directory then
-    vim.notify("[miniobsidian] 模板目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    vim.notify("[miniobsidian] Templates directory is unsafe: " .. tostring(directory_err), vim.log.levels.ERROR)
     return
   end
   local templates_dir = directory.path
@@ -66,7 +66,7 @@ function M.new_template(name)
       or (directory.logical .. "/" .. input_name .. ".md")
     local target, target_err = path_policy.resolve(cfg.vault_path, logical)
     if not target then
-      vim.notify("[miniobsidian] 模板路径不安全: " .. tostring(target_err), vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Template path is unsafe: " .. tostring(target_err), vim.log.levels.ERROR)
       return
     end
     local path = target.path
@@ -90,7 +90,7 @@ function M.new_template(name)
 
     local created, create_err = require("miniobsidian.fs").create_exclusive(path, skeleton)
     if created == nil then
-      vim.notify("[miniobsidian] 创建模板失败: " .. tostring(create_err), vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Failed to create template: " .. tostring(create_err), vim.log.levels.ERROR)
       return
     end
 
@@ -105,7 +105,7 @@ function M.new_template(name)
   if name and name ~= "" then
     do_create(name)
   else
-    vim.ui.input({ prompt = "模板名称: " }, do_create)
+    vim.ui.input({ prompt = "Template name: " }, do_create)
   end
 end
 
@@ -120,7 +120,7 @@ function M.insert()
   local cfg = require("miniobsidian").config
   local directory, directory_err = path_policy.resolve(cfg.vault_path, cfg.templates_folder, { allow_empty = true })
   if not directory then
-    vim.notify("[miniobsidian] 模板目录不安全: " .. tostring(directory_err), vim.log.levels.ERROR)
+    vim.notify("[miniobsidian] Templates directory is unsafe: " .. tostring(directory_err), vim.log.levels.ERROR)
     return
   end
   local templates_dir = directory.path
@@ -130,7 +130,7 @@ function M.insert()
   local files = vim.fn.globpath(templates_dir, "**/*.md", false, true)
 
   if #files == 0 then
-    vim.notify("[miniobsidian] 模板目录为空或不存在: " .. templates_dir, vim.log.levels.WARN)
+    vim.notify("[miniobsidian] Templates directory is empty or does not exist: " .. templates_dir, vim.log.levels.WARN)
     return
   end
 
@@ -168,7 +168,7 @@ function M.insert()
   end
 
   select_fn(names, {
-    prompt = "选择模板:",
+    prompt = "Select template:",
   }, function(choice)
     -- choice 为 nil 表示用户取消选择（按 Esc 或关闭浮窗）
     if not choice then
@@ -182,7 +182,7 @@ function M.insert()
 
     local content_source, read_err = require("miniobsidian.fs").read(path)
     if not content_source then
-      vim.notify("[miniobsidian] 读取模板失败: " .. tostring(read_err), vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Failed to read template: " .. tostring(read_err), vim.log.levels.ERROR)
       return
     end
 
@@ -192,7 +192,7 @@ function M.insert()
       date_format = cfg.daily_date_format,
     })
     if not content then
-      vim.notify("[miniobsidian] 模板渲染失败: " .. tostring(render_err), vim.log.levels.ERROR)
+      vim.notify("[miniobsidian] Failed to render template: " .. tostring(render_err), vim.log.levels.ERROR)
       return
     end
     for _, warning in ipairs(warnings) do

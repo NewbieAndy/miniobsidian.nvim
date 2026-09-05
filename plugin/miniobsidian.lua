@@ -42,7 +42,7 @@ vim.api.nvim_create_user_command("ObsidianNew", function(opts)
 end, {
   nargs = "?",
   bang = true,
-  desc = "新建 Obsidian 笔记（到默认 notes_subdir）；! 请求 after_note_open 切换根目录",
+  desc = "Create a new Obsidian note (into default notes_subdir); ! requests root switch in after_note_open",
 })
 
 --- :ObsidianNewHere
@@ -53,7 +53,7 @@ end, {
 vim.api.nvim_create_user_command("ObsidianNewHere", function()
   require("miniobsidian.note").new_note_here()
 end, {
-  desc = "在当前文件树目录下新建笔记",
+  desc = "Create a new note in the current file tree directory",
 })
 
 --- :ObsidianSwitchVault
@@ -62,7 +62,7 @@ end, {
 vim.api.nvim_create_user_command("ObsidianSwitchVault", function()
   require("miniobsidian.vault").pick_and_switch()
 end, {
-  desc = "切换当前活跃 vault",
+  desc = "Switch the active vault",
 })
 
 --- :ObsidianSwitch
@@ -71,7 +71,7 @@ end, {
 vim.api.nvim_create_user_command("ObsidianSwitch", function()
   require("miniobsidian.note").quick_switch()
 end, {
-  desc = "快速切换 vault 内的笔记",
+  desc = "Quickly switch to a note inside the vault",
 })
 
 --- :ObsidianSearch [query]
@@ -82,7 +82,7 @@ vim.api.nvim_create_user_command("ObsidianSearch", function(opts)
   require("miniobsidian.note").search(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc = "全文搜索 vault",
+  desc = "Full-text search the vault",
 })
 
 --- :ObsidianBacklinks
@@ -91,7 +91,7 @@ end, {
 vim.api.nvim_create_user_command("ObsidianBacklinks", function()
   require("miniobsidian.note").backlinks()
 end, {
-  desc = "列出当前笔记的反向链接（不依赖 LSP）",
+  desc = "List backlinks for the current note (no LSP required)",
 })
 
 --- :ObsidianMove [target]
@@ -104,7 +104,7 @@ end, {
   complete = function(arg_lead, cmd_line, cursor_pos)
     return require("miniobsidian.note_move").complete_directories(arg_lead, cmd_line, cursor_pos)
   end,
-  desc = "移动当前或文件树选中的笔记并更新 Wikilink",
+  desc = "Move the current or file-tree-selected note and update Wikilinks",
 })
 
 --- :ObsidianRename [name]
@@ -114,7 +114,7 @@ vim.api.nvim_create_user_command("ObsidianRename", function(opts)
   require("miniobsidian.note").rename(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "*",
-  desc = "重命名当前或文件树选中的笔记并更新 Wikilink",
+  desc = "Rename the current or file-tree-selected note and update Wikilinks",
 })
 
 --- :ObsidianTemplate
@@ -123,7 +123,7 @@ end, {
 vim.api.nvim_create_user_command("ObsidianTemplate", function()
   require("miniobsidian.template").insert()
 end, {
-  desc = "插入模板",
+  desc = "Insert a template",
 })
 
 --- :ObsidianNewTemplate [name]
@@ -134,7 +134,7 @@ vim.api.nvim_create_user_command("ObsidianNewTemplate", function(opts)
   require("miniobsidian.template").new_template(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc = "新建模板文件",
+  desc = "Create a new template file",
 })
 
 --- :ObsidianPasteFile [name]
@@ -149,7 +149,7 @@ vim.api.nvim_create_user_command("ObsidianPasteFile", function(opts)
   require("miniobsidian.image").paste_file(opts.args ~= "" and opts.args or nil)
 end, {
   nargs = "?",
-  desc = "粘贴剪贴板文件或图片（macOS）",
+  desc = "Paste clipboard file or image (macOS)",
 })
 
 --- :ObsidianToday[!]
@@ -159,7 +159,7 @@ end, {
 --   • 使用 !（bang）时向 after_note_open 传递 switch_root=true。
 vim.api.nvim_create_user_command("ObsidianToday", function(opts)
   require("miniobsidian.daily").open_today({ switch_root = opts.bang })
-end, { bang = true, desc = "打开今日每日笔记；! 请求 after_note_open 切换根目录" })
+end, { bang = true, desc = "Open today's daily note; ! requests root switch in after_note_open" })
 
 --- :ObsidianSetup
 -- 使用默认配置初始化插件（等价于 require("miniobsidian").setup()）。
@@ -167,7 +167,7 @@ end, { bang = true, desc = "打开今日每日笔记；! 请求 after_note_open 
 -- 提供此命令主要用于测试或不使用插件管理器的场景。
 vim.api.nvim_create_user_command("ObsidianSetup", function()
   require("miniobsidian").setup()
-end, { desc = "初始化 miniobsidian（使用默认配置）" })
+end, { desc = "Initialize miniobsidian (default configuration)" })
 
 -- ── setup 完成后的延迟初始化 ───────────────────────────────────
 -- 监听 miniobsidian.init.setup() 触发的自定义事件 "MiniObsidianSetup"，
