@@ -235,6 +235,16 @@ Both commands work from a Markdown buffer or on the selected `.md` file in snack
 explorer, neo-tree, nvim-tree, oil.nvim, or netrw. A directory or non-Markdown
 selection is rejected.
 
+If a new basename would make an existing short Wikilink to another note ambiguous,
+that link is qualified to preserve its original target. Inside the moved note, local
+relative Markdown destinations are recalculated for the new directory, including
+attachments and self-links. This supports single-line inline links/images and
+single-line reference definitions, preserving titles and URL fragments. External URLs,
+absolute paths, and links outside the Vault are left unchanged. Other notes' standard
+Markdown links are not rewritten. `updated_links` counts both Wikilink and Markdown
+destination changes. Code and comments are excluded from link and heading rewrites;
+synchronized YAML titles are escaped.
+
 Move targets support Vault-directory completion. Use `:ObsidianMove <Tab>` to list
 directories or type a prefix such as `:ObsidianMove Pro<Tab>`. The interactive input
 opened by a keymap or argument-less command supports the same Tab completion.
@@ -282,11 +292,15 @@ vim.keymap.set("n", "<CR>", function()
 end)
 ```
 
+Internal symlinks are deduplicated by their real file identity. Note IDs use the
+real Vault-relative path, so aliases do not create duplicate candidates.
+
 ## Checkboxes
 
 `checkbox.toggle()` cycles through `checkbox_states`. Plain `- item`, `* item`, and
 `+ item` lines are upgraded to the first state. `checkbox.clear()` restores a checkbox
-to a plain list item.
+to a plain list item. Task markers contain one character and are followed by
+whitespace or the end of the line; ordinary Markdown links are preserved.
 
 ```lua
 vim.keymap.set("n", "<leader>nt", function() require("miniobsidian.checkbox").toggle() end)
@@ -324,7 +338,10 @@ preserving their original format; images (PNG, JPEG, GIF, WEBP, HEIC, HEIF, TIFF
 BMP, or SVG) are inserted as `![](path)`, while other files are inserted as
 `[filename](path)`. Screenshots and browser images are converted to PNG/JPG/GIF.
 
-If any supported extension already uses the requested name, the plugin selects
+Attachment paths are URL-encoded and link labels are escaped, including spaces,
+brackets, and `#` in filenames.
+
+If the same filename and extension already exist, the plugin selects
 `name-1`, `name-2`, and so on. Files are written to a same-directory temporary file
 and then published with exclusive no-replace semantics.
 

@@ -45,4 +45,14 @@ describe("checkbox", function()
     require("miniobsidian.checkbox").toggle()
     assert.equals("- [[Note]]", line())
   end)
+
+  it("preserves inline and reference links when toggling or clearing lists", function()
+    for _, text in ipairs({ "- [OpenAI](https://example.com)", "- [x](url)", "- [x][ref]", "- [label] text" }) do
+      set_line(text)
+      require("miniobsidian.checkbox").toggle()
+      assert.equals(text, line())
+      require("miniobsidian.checkbox").clear()
+      assert.equals(text, line())
+    end
+  end)
 end)

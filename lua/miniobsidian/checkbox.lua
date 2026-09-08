@@ -43,7 +43,7 @@ function M.toggle()
   --                        防止 [[wiki link]] 被误匹配为 checkbox 状态
   --   (.*)$             → 捕获 checkbox 之后的剩余内容
   local prefix, state, suffix = line:match("^(%s*[-*+]%s+)%[([^%[%]]-)%](.*)$")
-  if prefix and state ~= nil then
+  if prefix and state ~= nil and vim.fn.strchars(state) == 1 and (suffix == "" or suffix:match("^%s")) then
     -- 在 states 列表中查找当前状态，取下一个；找不到时重置为第一个
     local next_state = states[1]
     for i, s in ipairs(states) do
@@ -88,12 +88,12 @@ function M.clear()
   -- pattern：`^(%s*[-*+]%s+)%[[^%[%]]-%]%s?(.*)`
   --   %[[^%[%]]-%]  → 任意状态的 checkbox（排除 [ 和 ] 字符，防止误匹配 [[wiki]] 行）
   --   %s?           → 吃掉 checkbox 后紧跟的一个可选空格
-  local prefix, rest = line:match("^(%s*[-*+]%s+)%[[^%[%]]-%]%s?(.*)")
-  if not prefix then
+  local prefix, state, suffix = line:match("^(%s*[-*+]%s+)%[([^%[%]]-)%](.*)$")
+  if not prefix or vim.fn.strchars(state) ~= 1 or (suffix ~= "" and not suffix:match("^%s")) then
     return
   end -- 非 checkbox 行，静默跳过
 
-  vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { prefix .. rest })
+  vim.api.nvim_buf_set_lines(buf, row, row + 1, false, { prefix .. suffix:gsub("^%s", "") })
 end
 
 return M

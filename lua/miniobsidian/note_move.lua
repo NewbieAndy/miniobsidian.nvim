@@ -4,6 +4,7 @@ local uv = vim.uv or vim.loop
 local fs = require("miniobsidian.fs")
 local path_policy = require("miniobsidian.path")
 local wikilink = require("miniobsidian.wikilink")
+local markdown = require("miniobsidian.markdown")
 
 ---Stable error codes exposed for tests and programmatic handling.
 M.error_codes = {
@@ -279,8 +280,17 @@ local function rewrite_link(inner, notes, vault, old_id, new_id, short_unique)
     return nil
   end
   local target = wikilink.resolve(parsed, notes, vault)
-  if not target or target.id ~= old_id then
+  if not target then
     return nil
+  end
+  -- A new basename can also make a previously unique link to another note ambiguous.
+  -- Preserve its pre-move identity by qualifying it before publishing the new name.
+  if target.id ~= old_id then
+    if parsed.target:find("/", 1, true) or note_basename(target.id):lower() ~= note_basename(new_id):lower() then
+      return nil
+    end
+    new_id = target.id
+    short_unique = false
   end
 
   local suffix_at = inner:find("[#|]")
@@ -296,112 +306,36 @@ local function rewrite_link(inner, notes, vault, old_id, new_id, short_unique)
   return replacement
 end
 
-local function fence_marker(line)
-  local marker = line:match("^%s*([`~]+)")
-  if marker and #marker >= 3 and (marker:match("^`+$") or marker:match("^~+$")) then
-    return marker
-  end
-  return nil
-end
-
-local function rewrite_line(line, state, notes, vault, old_id, new_id, short_unique)
-  local output = {}
-  local index = 1
-  local count = 0
-  local code_delimiter
-  while index <= #line do
-    if state.comment then
-      local close_at = line:find("%%", index, true)
-      if not close_at then
-        output[#output + 1] = line:sub(index)
-        break
-      end
-      output[#output + 1] = line:sub(index, close_at + 1)
-      index = close_at + 2
-      state.comment = false
-    elseif code_delimiter then
-      local close_at = line:find(code_delimiter, index, true)
-      if not close_at then
-        output[#output + 1] = line:sub(index)
-        break
-      end
-      output[#output + 1] = line:sub(index, close_at + #code_delimiter - 1)
-      index = close_at + #code_delimiter
-      code_delimiter = nil
-    elseif line:sub(index, index + 1) == "%%" then
-      state.comment = true
-      output[#output + 1] = "%%"
-      index = index + 2
-    elseif line:sub(index, index) == "`" then
-      code_delimiter = line:sub(index):match("^(`+)")
-      output[#output + 1] = code_delimiter
-      index = index + #code_delimiter
-    elseif line:sub(index, index + 1) == "[[" then
-      local close_at = line:find("]]", index + 2, true)
-      if not close_at then
-        output[#output + 1] = line:sub(index)
-        break
-      end
-      local inner = line:sub(index + 2, close_at - 1)
-      local replacement = rewrite_link(inner, notes, vault, old_id, new_id, short_unique)
-      output[#output + 1] = replacement or line:sub(index, close_at + 1)
-      if replacement then
-        count = count + 1
-      end
-      index = close_at + 2
-    else
-      output[#output + 1] = line:sub(index, index)
-      index = index + 1
-    end
-  end
-  return table.concat(output), count
-end
-
 local function rewrite_wikilinks(content, notes, vault, old_id, new_id, short_unique)
-  local state = { comment = false, fence = nil }
-  local count = 0
-  local output = {}
-  local position = 1
-  while position <= #content do
-    local newline_at = content:find("\n", position, true)
-    local line_end = newline_at and newline_at - 1 or #content
-    local ending = newline_at and "\n" or ""
-    local line = content:sub(position, line_end)
-    if line:sub(-1) == "\r" then
-      line = line:sub(1, -2)
-      ending = "\r" .. ending
-    end
-
-    local marker = fence_marker(line)
-    if state.fence then
-      if marker and marker:sub(1, 1) == state.fence then
-        state.fence = nil
-      end
-      output[#output + 1] = line .. ending
-    elseif marker then
-      state.fence = marker:sub(1, 1)
-      output[#output + 1] = line .. ending
-    else
-      local rewritten, line_count = rewrite_line(line, state, notes, vault, old_id, new_id, short_unique)
-      output[#output + 1] = rewritten .. ending
-      count = count + line_count
-    end
-    position = newline_at and newline_at + 1 or #content + 1
-  end
-  return table.concat(output), count
+  return markdown.transform(content, function(line, visible)
+    return markdown.wikilinks(line, visible, function(inner)
+      return rewrite_link(inner, notes, vault, old_id, new_id, short_unique)
+    end)
+  end)
 end
 
 local function replace_yaml_title(line, old_title, new_title)
   for _, quote in ipairs({ '"', "'" }) do
     local prefix, value, trailing = line:match("^(%s*title%s*:%s*)" .. quote .. "(.*)" .. quote .. "(%s*)$")
-    if prefix and value == old_title then
-      return prefix .. quote .. new_title .. quote .. trailing, true
+    local decoded = value
+    if prefix then
+      if quote == "'" then
+        decoded = value:gsub("''", "'")
+      else
+        local ok, parsed = pcall(vim.json.decode, '"' .. value .. '"')
+        decoded = ok and parsed or value
+      end
+    end
+    if prefix and decoded == old_title then
+      local encoded = quote == "'" and ("'" .. new_title:gsub("'", "''") .. "'")
+        or require("miniobsidian").yaml_quote(new_title)
+      return prefix .. encoded .. trailing, true
     end
   end
 
   local prefix, value, trailing = line:match("^(%s*title%s*:%s*)(%S.-)(%s*)$")
   if prefix and value == old_title then
-    return prefix .. new_title .. trailing, true
+    return prefix .. require("miniobsidian").yaml_quote(new_title) .. trailing, true
   end
   return line, false
 end
@@ -427,46 +361,23 @@ local function rewrite_note_identity(content, old_title, new_title)
     return content, 0
   end
 
-  local output = {}
-  local position = 1
-  local line_number = 0
   local in_frontmatter = false
   local first_h1_seen = false
-  local count = 0
-  while position <= #content do
-    local newline_at = content:find("\n", position, true)
-    local line_end = newline_at and newline_at - 1 or #content
-    local ending = newline_at and "\n" or ""
-    local line = content:sub(position, line_end)
-    if line:sub(-1) == "\r" then
-      line = line:sub(1, -2)
-      ending = "\r" .. ending
-    end
-
-    line_number = line_number + 1
+  return markdown.transform(content, function(line, visible, line_number)
+    local changed = false
     if line_number == 1 and line:match("^%s*%-%-%-%s*$") then
       in_frontmatter = true
     elseif in_frontmatter and (line:match("^%s*%-%-%-%s*$") or line:match("^%s*%.%.%.%s*$")) then
       in_frontmatter = false
     elseif in_frontmatter then
-      local changed
       line, changed = replace_yaml_title(line, old_title, new_title)
-      if changed then
-        count = count + 1
-      end
-    elseif not first_h1_seen then
-      local changed, is_h1
+    elseif not first_h1_seen and visible:match("^%s*#%s+") then
+      local is_h1
       line, changed, is_h1 = replace_h1(line, old_title, new_title)
       first_h1_seen = is_h1
-      if changed then
-        count = count + 1
-      end
     end
-
-    output[#output + 1] = line .. ending
-    position = newline_at and newline_at + 1 or #content + 1
-  end
-  return table.concat(output), count
+    return line, changed and 1 or 0
+  end)
 end
 
 local function build_updates(notes, vault, source, target)
@@ -500,6 +411,15 @@ local function build_updates(notes, vault, source, target)
     local rewritten, link_count = rewrite_wikilinks(content, notes, vault, old_id, new_id, short_unique)
     local identity_count = 0
     if same_path(note_path, source.path) then
+      local relative_links
+      rewritten, relative_links = require("miniobsidian.markdown_link").rebase(
+        rewritten,
+        dirname(source.path),
+        dirname(target.path),
+        vault,
+        { old_path = source.real_path, new_path = target.path }
+      )
+      link_count = link_count + relative_links
       rewritten, identity_count = rewrite_note_identity(rewritten, old_title, new_title)
     end
     if rewritten ~= content then
@@ -542,15 +462,18 @@ local function refresh_buffers(source_buffer, source, target, updates)
 
   local changed = {}
   local changed_paths = {}
+  local source_changed = false
   for _, update in ipairs(updates) do
     changed[path_policy.normalize(update.old_path)] = true
     changed_paths[#changed_paths + 1] = update.old_path
+    source_changed = source_changed or update.path == target.path
   end
   for _, buffer in ipairs(vim.api.nvim_list_bufs()) do
     if vim.api.nvim_buf_is_loaded(buffer) then
       local name = vim.api.nvim_buf_get_name(buffer)
       local previous_name = buffer == source_buffer and source.path or name
-      local was_changed = changed[path_policy.normalize(previous_name)] == true
+      local was_changed = (buffer == source_buffer and source_changed)
+        or changed[path_policy.normalize(previous_name)] == true
       if not was_changed then
         for _, changed_path in ipairs(changed_paths) do
           if same_path(previous_name, changed_path) then

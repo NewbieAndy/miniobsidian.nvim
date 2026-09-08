@@ -58,8 +58,7 @@ local function new_default_config()
     picker_scope = "notes",
 
     --- Checkbox 循环切换状态列表（按顺序循环）。
-    -- 默认覆盖 Obsidian 最常用的 4 种状态：未完成→进行中→已完成→已取消。
-    -- 可自定义：设为 { " ", "x" } 即回退到经典双态切换。
+    -- 默认未完成/已完成双态；可扩展为 { " ", "/", "x", "-" }。
     checkbox_states = { " ", "x" },
 
     ---@type fun(name: string, path: string)|nil
@@ -77,18 +76,29 @@ local function new_default_config()
     ---@param title string 笔记标题
     ---@return string id  用作文件名的 slug
     note_id_func = function(title)
-      -- pattern 说明：
-      --   %w                   → ASCII 字母和数字（[a-zA-Z0-9]）
-      --   %s                   → 空白字符（空格、Tab 等）
-      --   \u{2E80}-\u{9FFF}   → CJK 部首补充、笔画、汉字扩展A、康熙字典部首、
-      --                          注音符号、平假名、片假名、基本 CJK 统一汉字
-      --   \u{AC00}-\u{D7AF}   → 韩语谚文音节块
-      --   \u{F900}-\u{FAFF}   → CJK 兼容汉字
-      -- 取反（[^ ...]）意味着删掉以上范围以外的所有字符（标点、特殊符号等）
-      local id = title:gsub("[^%w%s\u{2E80}-\u{9FFF}\u{AC00}-\u{D7AF}\u{F900}-\u{FAFF}]", "")
+      -- 按 Unicode 字符保留汉字、假名、谚文和 ASCII 字母数字；不拆分 UTF-8 字节。
+      local characters = {}
+      -- Lua patterns operate on bytes. Iterate complete characters before checking ranges.
+      for _, char in ipairs(vim.fn.split(title, "\\zs")) do
+        local code = vim.fn.char2nr(char)
+        local cjk = (code >= 0x3400 and code <= 0x9FFF)
+          or (code >= 0x3041 and code <= 0x3096)
+          or (code >= 0x30A1 and code <= 0x30FA)
+          or (code >= 0x30FC and code <= 0x30FF)
+          or (code >= 0x309D and code <= 0x309F)
+          or code == 0x3005
+          or code == 0x3007
+          or (code >= 0x20000 and code <= 0x2FA1F)
+          or (code >= 0xAC00 and code <= 0xD7AF)
+          or (code >= 0xF900 and code <= 0xFAFF)
+        if cjk or (#char == 1 and char:match("[%w%s]")) then
+          characters[#characters + 1] = char
+        end
+      end
+      local id = table.concat(characters)
 
       -- 将一个或多个连续空白替换为单个连字符，生成 kebab-case 风格 slug
-      id = id:gsub("%s+", "-")
+      id = id:gsub("^%s+", ""):gsub("%s+$", ""):gsub("%s+", "-")
 
       -- string.lower 仅影响 ASCII 范围，中文字符不受影响
       id = id:lower()
@@ -241,13 +251,16 @@ function M.get_all_notes(force)
   -- 过滤：排除路径中含有隐藏目录段（以 "." 开头）的文件，
   -- 避免 .obsidian/、.git/ 等目录下的 .md 文件混入笔记列表。
   local notes = {}
+  local seen = {}
   -- 去掉 vault 末尾斜杠后加 "/"，确保无论 vault_path 是否带尾斜杠都能正确截取相对路径
   for _, p in ipairs(raw) do
     local resolved = path_policy.resolve(vault, p, { allow_absolute = true })
-    if resolved then
-      notes[#notes + 1] = p
+    if resolved and vim.fn.filereadable(resolved.real_path) == 1 and not seen[resolved.real_path] then
+      seen[resolved.real_path] = true
+      notes[#notes + 1] = path_policy.join(vault, resolved.logical)
     end
   end
+  table.sort(notes)
 
   _cache = notes
   _cache_lookup = {}

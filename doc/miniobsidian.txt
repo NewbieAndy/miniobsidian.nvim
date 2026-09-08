@@ -215,6 +215,14 @@ blink.cmp provider:
     A short link stays short when the new basename is unique, becomes Vault-qualified
     when ambiguous, and an originally qualified link stays qualified. Aliases,
     fragments, and explicit .md suffixes are preserved.
+    Existing short Wikilinks to other notes are qualified if the new basename would
+    make them ambiguous. Local relative Markdown destinations in the moved note are
+    recalculated, including attachments and self-links. Single-line inline links
+    and reference definitions are supported; titles and URL fragments are retained.
+    External URLs, absolute paths, and targets outside the Vault are unchanged.
+    Standard Markdown links in other notes are not rewritten. updated_links counts
+    both Wikilinks and Markdown destination changes. Code and comments are excluded
+    from link/heading rewrites; synchronized YAML titles are escaped.
     Press Tab in the command line or interactive prompt to complete Vault-relative
     directories. A typed prefix filters candidates. In the interactive completion
     menu, Down/j selects next and Up/h/k selects previous. Candidates end in /.
@@ -273,11 +281,16 @@ Heading lookup matches visible heading text case-insensitively and recognizes -1
 -2, and later duplicate suffixes. It is not a complete Obsidian anchor-slug
 implementation. Block IDs match only at the end of a line.
 
+Internal symlinks are deduplicated by real path; Note IDs use the real
+Vault-relative path rather than the symlink alias.
+
 CHECKBOX                                                   *miniobsidian-checkbox*
 
 checkbox.toggle() cycles through checkbox_states. Plain -, *, and + list items are
 upgraded to the first state. checkbox.clear() restores a checkbox to a plain list
-item. Typing - [, * [, or + [ exposes every configured state through blink.
+item. Task markers contain one character, followed by whitespace or end of line;
+ordinary Markdown links are preserved. Typing - [, * [, or + [ exposes every
+configured state through blink.
 
 TEMPLATES                                                   *miniobsidian-template*
 

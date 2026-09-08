@@ -209,6 +209,12 @@ blink.cmp provider：
     目标为已有目录时保留原文件名。省略目标时提示输入。
     原短链接在新文件名全 Vault 唯一时保持短链接；存在同名目标时升级为 Vault
     相对路径；原本带目录的链接继续使用完整路径。alias、锚点和 .md 后缀保留。
+    新文件名若使原本指向其他笔记的短 Wikilink 产生歧义，该链接会升级为限定
+    路径。被移动笔记内的本地相对 Markdown 路径会按新目录重算，包括附件和
+    自引用；支持单行行内链接/图片及单行引用定义，保留标题和 URL 锚点。
+    外部 URL、绝对路径和 Vault 外目标不变；其他笔记中的普通 Markdown 链接
+    不改写。updated_links 同时统计 Wikilink 和 Markdown 路径变化。链接和标题
+    同步均跳过代码与注释，YAML 标题使用安全转义。
     命令行或交互输入中按 Tab 可补全 Vault 相对目录；输入目录前缀后再按 Tab
     可过滤候选。交互补全菜单支持 ↓/j 下一项和 ↑/h/k 上一项。目录候选以 /
     结尾。成功后向支持的 LSP 同步重命名及文件变化，刷新定义和引用索引。
@@ -260,11 +266,14 @@ alias、heading 或 block ID。同名候选插入 Vault 相对限定路径，预
 Heading 按可见标题文本做大小写不敏感匹配，并识别重复标题的 -1、-2 等后缀；
 这不是完整的 Obsidian anchor slug 实现。Block ID 只匹配行末的 ^block-id。
 
+内部符号链接按真实文件路径去重，Note ID 使用真实的 Vault 相对路径。
+
 CHECKBOX                                             *miniobsidian-zh-checkbox*
 
 checkbox.toggle() 按 checkbox_states 循环；普通 -、*、+ 列表项会升级为第一个
 状态。checkbox.clear() 将 Checkbox 恢复为普通列表项。输入 - [、* [ 或 + [
-时，blink source 提供所有配置状态。
+时，blink source 提供所有配置状态。任务标记必须包含单个字符，右括号后为
+空白或行尾；普通 Markdown 链接保持不变。
 
 模板                                                   *miniobsidian-zh-template*
 

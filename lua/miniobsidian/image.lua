@@ -14,6 +14,7 @@
 local M = {}
 local path_policy = require("miniobsidian.path")
 local fs = require("miniobsidian.fs")
+local markdown_link = require("miniobsidian.markdown_link")
 
 -- ── 平台检测（模块加载时一次性完成，避免每次调用重复检测）────────
 local IS_MACOS = vim.fn.has("mac") == 1
@@ -99,31 +100,10 @@ end
 ---@param to_path  string 目标文件（绝对路径）
 ---@return string
 local function relative_path(from_dir, to_path)
-  from_dir = from_dir:gsub("/$", "")
-  local parts_from = vim.split(from_dir, "/", { plain = true })
-  local parts_to = vim.split(to_path, "/", { plain = true })
-  if parts_from[1] == "" then
-    table.remove(parts_from, 1)
-  end
-  if parts_to[1] == "" then
-    table.remove(parts_to, 1)
-  end
-  local common = 0
-  for i = 1, math.min(#parts_from, #parts_to) do
-    if parts_from[i] == parts_to[i] then
-      common = i
-    else
-      break
-    end
-  end
-  local result = {}
-  for _ = 1, #parts_from - common do
-    table.insert(result, "..")
-  end
-  for i = common + 1, #parts_to do
-    table.insert(result, parts_to[i])
-  end
-  return table.concat(result, "/")
+  return path_policy.relative(
+    path_policy.realpath(from_dir) or path_policy.normalize(from_dir),
+    path_policy.realpath(to_path) or path_policy.normalize(to_path)
+  )
 end
 
 --- 从原始文件名中分离出主干与扩展名。
@@ -280,9 +260,9 @@ function M.paste_file(name)
         -- 图片使用 ![](path)，其他文件使用 [文件名](path)
         local link
         if is_image(ext) then
-          link = string.format("![](%s)", rel_path)
+          link = string.format("![](%s)", markdown_link.encode_path(rel_path))
         else
-          link = string.format("[%s](%s)", filename, rel_path)
+          link = string.format("[%s](%s)", markdown_link.escape_label(filename), markdown_link.encode_path(rel_path))
         end
         table.insert(md_lines, link)
       end

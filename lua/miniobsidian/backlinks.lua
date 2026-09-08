@@ -26,67 +26,13 @@ local function note_lines(path)
   return fs.read_lines(path)
 end
 
-local function fence_marker(line)
-  local marker = line:match("^%s*([`~]+)")
-  if marker and #marker >= 3 and (marker:match("^`+$") or marker:match("^~+$")) then
-    return marker
-  end
-  return nil
-end
-
-local function scan_line(line, state, callback)
-  local index = 1
-  local code_delimiter
-  while index <= #line do
-    if state.comment then
-      local close_at = line:find("%%", index, true)
-      if not close_at then
-        return
-      end
-      index = close_at + 2
-      state.comment = false
-    elseif code_delimiter then
-      local close_at = line:find(code_delimiter, index, true)
-      if not close_at then
-        return
-      end
-      index = close_at + #code_delimiter
-      code_delimiter = nil
-    elseif line:sub(index, index + 1) == "%%" then
-      state.comment = true
-      index = index + 2
-    elseif line:sub(index, index) == "`" then
-      code_delimiter = line:sub(index):match("^(`+)")
-      index = index + #code_delimiter
-    elseif line:sub(index, index + 1) == "[[" then
-      local close_at = line:find("]]", index + 2, true)
-      if not close_at then
-        return
-      end
-      callback(line:sub(index + 2, close_at - 1), index - 1)
-      index = close_at + 2
-    else
-      index = index + 1
-    end
-  end
-end
-
 local function scan_lines(lines, callback)
-  local state = { comment = false, fence = nil }
-  for line_number, line in ipairs(lines) do
-    local marker = fence_marker(line)
-    if state.fence then
-      if marker and marker:sub(1, 1) == state.fence then
-        state.fence = nil
-      end
-    elseif marker then
-      state.fence = marker:sub(1, 1)
-    else
-      scan_line(line, state, function(inner, column)
-        callback(inner, line_number, column, line)
-      end)
-    end
-  end
+  local markdown = require("miniobsidian.markdown")
+  markdown.transform(table.concat(lines, "\n"), function(line, visible, number)
+    markdown.wikilinks(line, visible, function(inner, column)
+      callback(inner, number, column, line)
+    end)
+  end)
 end
 
 ---@param target_path? string Absolute path; defaults to the current buffer.

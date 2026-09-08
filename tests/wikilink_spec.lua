@@ -83,4 +83,19 @@ describe("wikilink", function()
     vim.ui.input = original_input
     assert.equals(1, vim.fn.filereadable(vault .. "/Projects/New Note.md"))
   end)
+
+  it("deduplicates internal symlink identities for navigation and scanning", function()
+    local real = vault .. "/Notes/Real.md"
+    local alias = vault .. "/Notes/Alias.md"
+    vim.fn.writefile({ "# Real" }, real)
+    assert(vim.uv.fs_symlink(real, alias))
+    local core = require("miniobsidian")
+    assert.same({ real }, core.get_all_notes(true))
+    core.update_note_cache(alias)
+    assert.same({ real }, core.get_all_notes())
+    local result = assert(wikilink.resolve({ target = "Real" }, { alias, real }, vault))
+    assert.equals("Notes/Real", result.id)
+    vim.fn.writefile({ "[[Real]]" }, vault .. "/Notes/Ref.md")
+    assert.equals(1, #assert(require("miniobsidian.backlinks").collect(real)))
+  end)
 end)

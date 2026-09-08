@@ -466,4 +466,121 @@ describe("note move", function()
     assert.equals(0, vim.fn.filereadable(vault .. "/Archive/Source.md"))
     assert.same({ "[[Notes/Source]]" }, vim.fn.readfile(reference))
   end)
+
+  it("escapes synchronized YAML titles for quoted and plain scalars", function()
+    for index, title in ipairs({ 'title: "Old"', "title: 'Old'", "title: Old" }) do
+      local source = vault .. "/Notes/Old.md"
+      vim.fn.writefile({ "---", title, "---", "# Old" }, source)
+      local result = assert(require("miniobsidian.note").rename([[A "quote" and 'single']], {
+        source = source,
+        notify = false,
+      }))
+      local output = vim.fn.readfile(result.new_path)
+      local expected = index == 2 and [[title: 'A "quote" and ''single''']] or [[title: "A \"quote\" and 'single'"]]
+      assert.equals(expected, output[2])
+      assert.equals([[# A "quote" and 'single']], output[4])
+      vim.fn.delete(result.new_path)
+    end
+  end)
+
+  it("preserves fenced examples and updates only the first real heading", function()
+    local source = vault .. "/Notes/Old.md"
+    local reference = vault .. "/Notes/Ref.md"
+    local example = { "````md", "```", "# Old", "[[Old]]", "````", "<!-- # Old -->", "%%", "# Old", "%%" }
+    local content = vim.list_extend(vim.deepcopy(example), { "# Old", "# Old" })
+    vim.fn.writefile(content, source)
+    vim.fn.writefile(vim.list_extend(vim.deepcopy(example), { "[[Old]]" }), reference)
+    local result = assert(require("miniobsidian.note").rename("New", { source = source, notify = false }))
+    assert.same(vim.list_extend(vim.deepcopy(example), { "# New", "# Old" }), vim.fn.readfile(result.new_path))
+    assert.same(vim.list_extend(vim.deepcopy(example), { "[[New]]" }), vim.fn.readfile(reference))
+    assert.equals(1, result.updated_identity_fields)
+    assert.equals(1, result.updated_links)
+  end)
+
+  it("preserves links to other notes when the new basename introduces ambiguity", function()
+    local source = vault .. "/Notes/Old.md"
+    local reference = vault .. "/Notes/Ref.md"
+    vim.fn.mkdir(vault .. "/Dir", "p")
+    vim.fn.writefile({ "old" }, source)
+    vim.fn.writefile({ "new" }, vault .. "/Dir/New.md")
+    vim.fn.writefile({ "[[New]] ![[New.md#Part|Alias]] [[Dir/New]] [[Old]]" }, reference)
+    local result = assert(require("miniobsidian.note").rename("New", { source = source, notify = false }))
+    assert.same({ "[[Dir/New]] ![[Dir/New.md#Part|Alias]] [[Dir/New]] [[Notes/New]]" }, vim.fn.readfile(reference))
+    assert.equals(3, result.updated_links)
+    local resolved = assert(
+      require("miniobsidian.wikilink").resolve(
+        { target = "Dir/New" },
+        require("miniobsidian").get_all_notes(true),
+        vault
+      )
+    )
+    assert.equals("Dir/New", resolved.id)
+  end)
+
+  it("keeps pasted attachments reachable after a cross-directory move", function()
+    local source = vault .. "/Notes/Old.md"
+    vim.fn.mkdir(vault .. "/Assets", "p")
+    vim.fn.writefile({ "image" }, vault .. "/Assets/image.png")
+    vim.fn.writefile({ "# Old", "![](../Assets/image.png)" }, source)
+    vim.cmd("edit " .. vim.fn.fnameescape(source))
+    local result = assert(require("miniobsidian.note").move("Archive/Deep/Old", { notify = false }))
+    local expected = { "# Old", "![](../../Assets/image.png)" }
+    assert.same(expected, vim.fn.readfile(result.new_path))
+    assert.same(expected, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    assert.equals(1, result.updated_links)
+    assert.equals(1, vim.fn.filereadable(vim.fn.fnamemodify(result.new_path, ":h") .. "/../../Assets/image.png"))
+  end)
+
+  it("rolls back already-written attachment paths when a later reference update fails", function()
+    local source = vault .. "/Notes/AAA.md"
+    local reference = vault .. "/Notes/ZZZ.md"
+    vim.fn.mkdir(vault .. "/Assets", "p")
+    vim.fn.writefile({ "image" }, vault .. "/Assets/image.png")
+    vim.fn.writefile({ "![](../Assets/image.png)" }, source)
+    vim.fn.writefile({ "[[Notes/AAA]]" }, reference)
+    local fs = require("miniobsidian.fs")
+    local original = fs.write_atomic
+    local calls = 0
+    fs.write_atomic = function(path, content)
+      calls = calls + 1
+      if calls == 2 then
+        return nil, "injected later failure"
+      end
+      return original(path, content)
+    end
+    local result, err = require("miniobsidian.note").move("Archive/Deep/AAA", { source = source, notify = false })
+    fs.write_atomic = original
+    assert.is_nil(result)
+    assert.truthy(err:find("UPDATE_REFERENCES_FAILED", 1, true))
+    assert.same({ "![](../Assets/image.png)" }, vim.fn.readfile(source))
+    assert.same({ "[[Notes/AAA]]" }, vim.fn.readfile(reference))
+    assert.equals(0, vim.fn.filereadable(vault .. "/Archive/Deep/AAA.md"))
+  end)
+
+  it("synchronizes an escaped YAML title again on a subsequent rename", function()
+    local source = vault .. "/Notes/Old.md"
+    vim.fn.writefile({ "---", 'title: "Old"', "---", "# Old" }, source)
+    local first = assert(require("miniobsidian.note").rename([[A "quote"]], { source = source, notify = false }))
+    local second = assert(require("miniobsidian.note").rename("Final", { source = first.new_path, notify = false }))
+    assert.same({ "---", 'title: "Final"', "---", "# Final" }, vim.fn.readfile(second.new_path))
+  end)
+
+  it("does not skip a custom first heading made entirely of inline code", function()
+    local source = vault .. "/Notes/Old.md"
+    local content = { "# `Custom`", "# Old" }
+    vim.fn.writefile(content, source)
+    local result = assert(require("miniobsidian.note").rename("New", { source = source, notify = false }))
+    assert.same(content, vim.fn.readfile(result.new_path))
+    assert.equals(0, result.updated_identity_fields)
+  end)
+
+  it("keeps Markdown self-links pointing at the moved note", function()
+    local source = vault .. "/Notes/Old.md"
+    vim.fn.writefile({ "[self](Old.md#Part)", "[other](Other.md)" }, source)
+    local renamed = assert(require("miniobsidian.note").rename("New", { source = source, notify = false }))
+    assert.same({ "[self](New.md#Part)", "[other](Other.md)" }, vim.fn.readfile(renamed.new_path))
+    local moved =
+      assert(require("miniobsidian.note").move("Archive/Deep/New", { source = renamed.new_path, notify = false }))
+    assert.same({ "[self](New.md#Part)", "[other](../../Notes/Other.md)" }, vim.fn.readfile(moved.new_path))
+  end)
 end)

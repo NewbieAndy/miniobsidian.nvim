@@ -224,6 +224,13 @@ Vault 内存在其他未保存的 Markdown buffer 时操作会中止；写入失
 nvim-tree、oil.nvim 或 netrw 中对光标选中的 `.md` 文件执行；选中目录或其他
 文件类型时会中止。
 
+如果新文件名会让原本指向其他笔记的短 Wikilink 产生歧义，该链接会升级为
+限定路径，保留原目标。被移动笔记内的本地相对 Markdown 路径会按新目录重算，
+包括附件和自引用；支持单行行内链接/图片及单行引用定义，并保留标题和 URL 锚点。
+外部 URL、绝对路径及 Vault 外目标保持不变；其他笔记中的普通 Markdown 链接
+不在改写范围内。事件的 `updated_links` 同时统计 Wikilink 和 Markdown 路径变化。
+链接与一级标题同步均跳过代码和注释，YAML 标题使用安全转义。
+
 移动目标支持 Vault 目录补全：在命令行输入 `:ObsidianMove <Tab>` 可列出目录，
 输入前缀后按 Tab 可缩小候选，例如 `:ObsidianMove Pro<Tab>`。通过快捷键或无参
 命令打开交互输入时同样可按 Tab 补全。补全菜单中可用 `↓`/`j` 选择下一项，
@@ -269,10 +276,14 @@ vim.keymap.set("n", "<CR>", function()
 end)
 ```
 
+内部符号链接按真实文件身份去重，Note ID 使用真实的 Vault 相对路径，避免别名
+导致重复候选。
+
 ## Checkbox
 
 `checkbox.toggle()` 按 `checkbox_states` 循环状态；普通 `- item`、`* item`、
 `+ item` 会升级成第一个状态。`checkbox.clear()` 将 Checkbox 恢复为普通列表项。
+任务标记必须包含单个字符，右括号后为空白或行尾；普通 Markdown 链接保持不变。
 
 ```lua
 vim.keymap.set("n", "<leader>nt", function() require("miniobsidian.checkbox").toggle() end)
@@ -309,7 +320,10 @@ Daily Note 的目标为 `dailies_folder/os.date(daily_date_format).md`。文件�
 SVG）插入 `![](path)`，其他文件插入 `[文件名](path)`。截图和浏览器图片转换为
 PNG/JPG/GIF。
 
-如果目标名已经被任一支持格式占用，会自动选择 `name-1`、`name-2`。文件先写入
+附件路径使用 URL 编码，链接标签进行 Markdown 转义，支持文件名中的空格、括号
+和 `#` 等字符。
+
+如果同文件名和扩展名的目标已经存在，会自动选择 `name-1`、`name-2`。文件先写入
 同目录临时文件，再以排他方式发布，最终目标不会被替换。
 
 ## 回调与事件

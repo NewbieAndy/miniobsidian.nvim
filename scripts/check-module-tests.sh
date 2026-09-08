@@ -23,6 +23,8 @@ health:health_spec.lua
 image:image_spec.lua
 init:init_spec.lua
 link:link_spec.lua
+markdown:markdown_spec.lua
+markdown_link:markdown_link_spec.lua
 note:note_spec.lua
 note_create:note_spec.lua
 note_move:note_move_spec.lua

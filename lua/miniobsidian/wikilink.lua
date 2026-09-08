@@ -49,9 +49,11 @@ end
 function M.resolve(link, notes, vault)
   local target = path_policy.normalize(strip_md(link.target))
   local candidates = {}
+  local seen = {}
   for _, absolute in ipairs(notes) do
     local id = note_id(vault, absolute)
-    if id then
+    if id and not seen[id] then
+      seen[id] = true
       candidates[#candidates + 1] = { id = id, path = absolute }
     end
   end
